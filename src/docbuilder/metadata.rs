@@ -182,7 +182,7 @@ impl Metadata {
     }
 
     pub(super) fn targets(&self) -> BuildTargets<'_> {
-        use super::rustwide_builder::{HOST_TARGET, TARGETS};
+        use super::rustwide_builder::HOST_TARGET;
 
         let default_target = self
             .default_target
@@ -200,7 +200,7 @@ impl Metadata {
             .targets
             .as_ref()
             .map(|targets| targets.iter().map(String::as_str).collect())
-            .unwrap_or_else(|| TARGETS.iter().copied().collect());
+            .unwrap_or_default();
 
         targets.remove(&default_target);
         BuildTargets {
@@ -302,24 +302,9 @@ mod test {
         let mut metadata = Metadata::default();
 
         // unchanged default_target, targets not specified
-        let BuildTargets {
-            default_target: default,
-            other_targets: tier_one,
-        } = metadata.targets();
+        let BuildTargets { default_target: default, other_targets } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
-
-        // should be equal to TARGETS \ {HOST_TARGET}
-        for actual in &tier_one {
-            assert!(TARGETS.contains(actual));
-        }
-
-        for expected in TARGETS {
-            if *expected == HOST_TARGET {
-                assert!(!tier_one.contains(&HOST_TARGET));
-            } else {
-                assert!(tier_one.contains(expected));
-            }
-        }
+        assert!(other_targets.is_empty());
 
         // unchanged default_target, targets specified to be empty
         metadata.targets = Some(Vec::new());
@@ -392,20 +377,10 @@ mod test {
         assert_eq!(default, "i686-apple-darwin");
         assert!(others.is_empty());
 
-        // and if `targets` is unset, it should still be set to `TARGETS`
+        // if `targets` is unset, don't build any extra targets
         metadata.targets = None;
-        let BuildTargets {
-            default_target: default,
-            other_targets: others,
-        } = metadata.targets();
-
+        let BuildTargets { default_target: default, other_targets } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
-        let tier_one_targets_no_default = TARGETS
-            .iter()
-            .filter(|&&t| t != "i686-apple-darwin")
-            .copied()
-            .collect();
-
-        assert_eq!(others, tier_one_targets_no_default);
+        assert!(other_targets.is_empty());
     }
 }
