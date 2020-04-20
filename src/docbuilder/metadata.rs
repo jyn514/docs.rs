@@ -302,7 +302,10 @@ mod test {
         let mut metadata = Metadata::default();
 
         // unchanged default_target, targets not specified
-        let BuildTargets { default_target: default, other_targets } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets,
+        } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(other_targets.is_empty());
 
@@ -379,7 +382,10 @@ mod test {
 
         // if `targets` is unset, don't build any extra targets
         metadata.targets = None;
-        let BuildTargets { default_target: default, other_targets } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets,
+        } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
         assert!(other_targets.is_empty());
     }
