@@ -1,5 +1,8 @@
+use crate::db::Client;
+use crate::Blocking;
 use failure::{Error, Fail};
-use postgres::Client;
+use futures_util::TryStreamExt;
+use sqlx::query;
 
 #[derive(Debug, Fail)]
 enum BlacklistError {
@@ -12,23 +15,27 @@ enum BlacklistError {
 
 /// Returns whether the given name is blacklisted.
 pub fn is_blacklisted(conn: &mut Client, name: &str) -> Result<bool, Error> {
-    let rows = conn.query(
-        "SELECT COUNT(*) FROM blacklisted_crates WHERE crate_name = $1;",
-        &[&name],
-    )?;
-    let count: i64 = rows[0].get(0);
+    let count = query!(
+        // postgres can't infer nullability from expressions; this should never be NULL
+        // the `count!` tells SQLx to give a runtime error if it's ever NULL
+        r#"SELECT COUNT(*) as "count!" FROM blacklisted_crates WHERE crate_name = $1;"#,
+        name,
+    )
+    .fetch_one(conn)
+    .block()?
+    .count;
 
     Ok(count != 0)
 }
 
 /// Returns the crate names on the blacklist, sorted ascending.
 pub fn list_crates(conn: &mut Client) -> Result<Vec<String>, Error> {
-    let rows = conn.query(
-        "SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;",
-        &[],
-    )?;
-
-    Ok(rows.into_iter().map(|row| row.get(0)).collect())
+    query!("SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;")
+        .fetch(conn)
+        .map_ok(|record| record.crate_name)
+        .try_collect()
+        .block()
+        .map_err(Into::into)
 }
 
 /// Adds a crate to the blacklist.
@@ -37,10 +44,12 @@ pub fn add_crate(conn: &mut Client, name: &str) -> Result<(), Error> {
         return Err(BlacklistError::CrateAlreadyOnBlacklist(name.into()).into());
     }
 
-    conn.execute(
+    query!(
         "INSERT INTO blacklisted_crates (crate_name) VALUES ($1);",
-        &[&name],
-    )?;
+        name,
+    )
+    .execute(conn)
+    .block()?;
 
     Ok(())
 }
@@ -51,10 +60,12 @@ pub fn remove_crate(conn: &mut Client, name: &str) -> Result<(), Error> {
         return Err(BlacklistError::CrateNotOnBlacklist(name.into()).into());
     }
 
-    conn.execute(
+    query!(
         "DELETE FROM blacklisted_crates WHERE crate_name = $1;",
-        &[&name],
-    )?;
+        name,
+    )
+    .execute(conn)
+    .block()?;
 
     Ok(())
 }

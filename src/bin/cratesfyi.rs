@@ -5,10 +5,12 @@ use std::sync::Arc;
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::utils::{remove_crate_priority, set_crate_priority};
 use docs_rs::{
-    BuildQueue, Config, Context, DocBuilder, Index, Metrics, RustwideBuilder, Server, Storage,
+    Blocking, BuildQueue, Config, Context, DocBuilder, Index, Metrics, RustwideBuilder, Server,
+    Storage,
 };
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
+use sqlx::query;
 use structopt::StructOpt;
 use strum::VariantNames;
 
@@ -193,12 +195,12 @@ impl PrioritySubcommand {
     pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
         match self {
             Self::Set { pattern, priority } => {
-                set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
+                set_crate_priority(&mut ctx.conn()?, &pattern, priority)
                     .context("Could not set pattern's priority")?;
             }
 
             Self::Remove { pattern } => {
-                if let Some(priority) = remove_crate_priority(&mut *ctx.conn()?, &pattern)
+                if let Some(priority) = remove_crate_priority(&mut ctx.conn()?, &pattern)
                     .context("Could not remove pattern's priority")?
                 {
                     println!("Removed pattern with priority {}", priority);
@@ -316,10 +318,13 @@ impl BuildSubcommand {
                         .pool()?
                         .get()
                         .context("failed to get a database connection")?;
-                    let res =
-                        conn.query("SELECT * FROM config WHERE name = 'rustc_version';", &[])?;
+                    let res = query!(
+                        r#"SELECT COUNT(*) as "count!" FROM config WHERE name = 'rustc_version';"#
+                    )
+                    .fetch_one(&mut conn)
+                    .block()?;
 
-                    if !res.is_empty() {
+                    if res.count > 0 {
                         println!("update-toolchain was already called in the past, exiting");
                         return Ok(());
                     }
@@ -398,7 +403,7 @@ impl DatabaseSubcommand {
     pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
         match self {
             Self::Migrate { version } => {
-                db::migrate(version, &mut *ctx.conn()?)
+                db::migrate(version, &mut ctx.conn()?)
                     .context("Failed to run database migrations")?;
             }
 
@@ -411,7 +416,7 @@ impl DatabaseSubcommand {
                 let index = ctx.index()?;
 
                 db::update_crate_data_in_database(
-                    &mut *ctx.conn()?,
+                    &mut ctx.conn()?,
                     &name,
                     &index.api().get_crate_data(&name)?,
                 )?;
@@ -424,22 +429,22 @@ impl DatabaseSubcommand {
 
             // FIXME: This is actually util command not database
             Self::UpdateReleaseActivity => {
-                docs_rs::utils::update_release_activity(&mut *ctx.conn()?)
+                docs_rs::utils::update_release_activity(&mut ctx.conn()?)
                     .context("Failed to update release activity")?
             }
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
-            } => db::delete_version(&mut *ctx.conn()?, &*ctx.storage()?, &name, &version)
+            } => db::delete_version(&mut ctx.conn()?, &*ctx.storage()?, &name, &version)
                 .context("failed to delete the crate")?,
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(&mut *ctx.conn()?, &*ctx.storage()?, &name)
+            } => db::delete_crate(&mut ctx.conn()?, &*ctx.storage()?, &name)
                 .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
             Self::Synchronize { dry_run } => {
-                docs_rs::utils::consistency::run_check(&mut *ctx.conn()?, &*ctx.index()?, dry_run)?;
+                docs_rs::utils::consistency::run_check(&mut ctx.conn()?, &*ctx.index()?, dry_run)?;
             }
         }
         Ok(())
@@ -468,7 +473,7 @@ enum BlacklistSubcommand {
 
 impl BlacklistSubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
-        let mut conn = &mut *ctx.conn()?;
+        let mut conn = ctx.conn()?;
         match self {
             Self::List => {
                 let crates = db::blacklist::list_crates(&mut conn)

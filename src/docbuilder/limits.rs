@@ -1,6 +1,8 @@
+use crate::db::Client;
 use crate::error::Result;
-use postgres::Client;
+use crate::Blocking;
 use serde::Serialize;
+use sqlx::query;
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -28,22 +30,22 @@ impl Limits {
     pub(crate) fn for_crate(conn: &mut Client, name: &str) -> Result<Self> {
         let mut limits = Self::default();
 
-        let res = conn.query(
+        let record = query!(
             "SELECT * FROM sandbox_overrides WHERE crate_name = $1;",
-            &[&name],
-        )?;
-        if !res.is_empty() {
-            let row = &res[0];
-            if let Some(memory) = row.get::<_, Option<i64>>("max_memory_bytes") {
+            name,
+        )
+        .fetch_optional(conn)
+        .block()?;
+        if let Some(rec) = record {
+            if let Some(memory) = rec.max_memory_bytes {
                 limits.memory = memory as usize;
             }
-            let timeout = row.get::<_, Option<i32>>("timeout_seconds");
-            if let Some(timeout) = timeout {
+            if let Some(timeout) = rec.timeout_seconds {
                 limits.timeout = Duration::from_secs(timeout as u64);
             }
-            if let Some(targets) = row.get::<_, Option<i32>>("max_targets") {
+            if let Some(targets) = rec.max_targets {
                 limits.targets = targets as usize;
-            } else if timeout.is_some() {
+            } else if rec.timeout_seconds.is_some() {
                 limits.targets = 1;
             }
         }
@@ -76,6 +78,7 @@ impl Limits {
 mod test {
     use super::*;
     use crate::test::*;
+    use sqlx::Executor;
 
     #[test]
     fn retrieve_limits() {
@@ -87,10 +90,12 @@ mod test {
             let hexponent = Limits::for_crate(&mut db.conn(), krate)?;
             assert_eq!(hexponent, Limits::default());
 
-            db.conn().query(
-                "INSERT INTO sandbox_overrides (crate_name, max_targets) VALUES ($1, 15)",
-                &[&krate],
-            )?;
+            db.conn()
+                .execute(query!(
+                    "INSERT INTO sandbox_overrides (crate_name, max_targets) VALUES ($1, 15)",
+                    krate,
+                ))
+                .block()?;
             // limits work if crate has limits set
             let hexponent = Limits::for_crate(&mut db.conn(), krate)?;
             assert_eq!(
@@ -109,11 +114,11 @@ mod test {
                 targets: 1,
                 ..Limits::default()
             };
-            db.conn().query(
+            db.conn().execute(query!(
                 "INSERT INTO sandbox_overrides (crate_name, max_memory_bytes, timeout_seconds, max_targets)
                  VALUES ($1, $2, $3, $4)",
-                &[&krate, &(limits.memory as i64), &(limits.timeout.as_secs() as i32), &(limits.targets as i32)]
-            )?;
+                krate, limits.memory as i64, limits.timeout.as_secs() as i32, limits.targets as i32,
+            )).block()?;
             assert_eq!(limits, Limits::for_crate(&mut db.conn(), krate)?);
             Ok(())
         });
@@ -124,10 +129,12 @@ mod test {
         wrapper(|env| {
             let db = env.db();
             let krate = "hexponent";
-            db.conn().query(
+            db.conn()
+                .execute(query!(
                 "INSERT INTO sandbox_overrides (crate_name, timeout_seconds) VALUES ($1, 20*60);",
-                &[&krate],
-            )?;
+                krate,
+            ))
+                .block()?;
             let limits = Limits::for_crate(&mut db.conn(), krate)?;
             assert_eq!(limits.targets, 1);
 

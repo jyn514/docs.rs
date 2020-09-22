@@ -9,6 +9,8 @@ pub use self::file::add_path_into_database;
 pub use self::migrate::migrate;
 pub use self::pool::{Pool, PoolClient, PoolError};
 
+pub type Client = sqlx::pool::PoolConnection<sqlx::Postgres>;
+
 mod add_package;
 pub mod blacklist;
 mod delete;

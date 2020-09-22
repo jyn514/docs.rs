@@ -4,18 +4,20 @@ use std::{
     path::Path,
 };
 
+use crate::db::Client;
 use crate::{
     docbuilder::{BuildResult, DocCoverage},
     error::Result,
     index::api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
     utils::MetadataPackage,
+    Blocking,
 };
 use log::{debug, info};
-use postgres::Client;
 use regex::Regex;
 use serde_json::Value;
 use slug::slugify;
+use sqlx::query;
 
 /// Adds a package into database.
 ///
@@ -44,7 +46,7 @@ pub(crate) fn add_package_into_database(
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let is_library = metadata_pkg.is_library();
 
-    let rows = conn.query(
+    let release_id = query!(
         "INSERT INTO releases (
             crate_id, version, release_time,
             dependencies, target_name, yanked, build_status,
@@ -84,48 +86,51 @@ pub(crate) fn add_package_into_database(
                 documentation_url = $24,
                 default_target = $25
          RETURNING id",
-        &[
-            &crate_id,
-            &metadata_pkg.version,
-            &registry_data.release_time.naive_utc(),
-            &serde_json::to_value(&dependencies)?,
-            &metadata_pkg.package_name(),
-            &registry_data.yanked,
-            &res.successful,
-            &has_docs,
-            &false, // TODO: Add test status somehow
-            &metadata_pkg.license,
-            &metadata_pkg.repository,
-            &metadata_pkg.homepage,
-            &metadata_pkg.description,
-            &rustdoc,
-            &readme,
-            &serde_json::to_value(&metadata_pkg.authors)?,
-            &serde_json::to_value(&metadata_pkg.keywords)?,
-            &has_examples,
-            &registry_data.downloads,
-            &source_files,
-            &serde_json::to_value(&doc_targets)?,
-            &is_library,
-            &res.rustc_version,
-            &metadata_pkg.documentation,
-            &default_target,
-        ],
-    )?;
-
-    let release_id: i32 = rows[0].get(0);
+        crate_id,
+        metadata_pkg.version,
+        //PrimitiveDateTime::from_unix_timestamp(registry_data.release_time.naive_utc().timestamp()),
+        registry_data.release_time.naive_utc(),
+        serde_json::to_value(&dependencies)?,
+        metadata_pkg.package_name(),
+        registry_data.yanked,
+        res.successful,
+        has_docs,
+        false, // TODO: Add test status somehow
+        metadata_pkg.license,
+        metadata_pkg.repository,
+        metadata_pkg.homepage,
+        metadata_pkg.description,
+        rustdoc,
+        readme,
+        serde_json::to_value(&metadata_pkg.authors)?,
+        serde_json::to_value(&metadata_pkg.keywords)?,
+        has_examples,
+        registry_data.downloads,
+        source_files,
+        serde_json::to_value(&doc_targets)?,
+        is_library,
+        res.rustc_version,
+        metadata_pkg.documentation,
+        default_target,
+    )
+    .fetch_one(&mut *conn)
+    .block()?
+    .id;
 
     add_keywords_into_database(conn, &metadata_pkg, release_id)?;
     add_authors_into_database(conn, &metadata_pkg, release_id)?;
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id)?;
 
     // Update the crates table with the new release
-    conn.execute(
+    query!(
         "UPDATE crates
          SET latest_version_id = $2
          WHERE id = $1",
-        &[&crate_id, &release_id],
-    )?;
+        crate_id,
+        release_id
+    )
+    .execute(conn)
+    .block()?;
 
     Ok(release_id)
 }
@@ -136,7 +141,7 @@ pub(crate) fn add_doc_coverage(
     doc_coverage: DocCoverage,
 ) -> Result<i32> {
     debug!("Adding doc coverage into database");
-    let rows = conn.query(
+    Ok(query!(
         "INSERT INTO doc_coverage (release_id, total_items, documented_items)
             VALUES ($1, $2, $3)
             ON CONFLICT (release_id) DO UPDATE
@@ -144,13 +149,13 @@ pub(crate) fn add_doc_coverage(
                     total_items = $2,
                     documented_items = $3
             RETURNING release_id",
-        &[
-            &release_id,
-            &doc_coverage.total_items,
-            &doc_coverage.documented_items,
-        ],
-    )?;
-    Ok(rows[0].get(0))
+        release_id,
+        doc_coverage.total_items,
+        doc_coverage.documented_items,
+    )
+    .fetch_one(conn)
+    .block()?
+    .release_id)
 }
 
 /// Adds a build into database
@@ -160,33 +165,42 @@ pub(crate) fn add_build_into_database(
     res: &BuildResult,
 ) -> Result<i32> {
     debug!("Adding build into database");
-    let rows = conn.query(
+    Ok(query!(
         "INSERT INTO builds (rid, rustc_version,
                                                     cratesfyi_version,
                                                     build_status, output)
                                 VALUES ($1, $2, $3, $4, $5)
                                 RETURNING id",
-        &[
-            &release_id,
-            &res.rustc_version,
-            &res.docsrs_version,
-            &res.successful,
-            &res.build_log,
-        ],
-    )?;
-    Ok(rows[0].get(0))
+        release_id,
+        res.rustc_version,
+        res.docsrs_version,
+        res.successful,
+        res.build_log,
+    )
+    .fetch_one(conn)
+    .block()?
+    .id)
 }
 
 fn initialize_package_in_database(conn: &mut Client, pkg: &MetadataPackage) -> Result<i32> {
-    let mut rows = conn.query("SELECT id FROM crates WHERE name = $1", &[&pkg.name])?;
-    // insert crate into database if it is not exists
-    if rows.is_empty() {
-        rows = conn.query(
-            "INSERT INTO crates (name) VALUES ($1) RETURNING id",
-            &[&pkg.name],
-        )?;
-    }
-    Ok(rows[0].get(0))
+    let id = query!("SELECT id FROM crates WHERE name = $1", pkg.name)
+        .fetch_optional(&mut *conn)
+        .block()?
+        .map(|record| record.id);
+    // Insert crate into database if it does not exist
+    // FIXME: could this be done in a single transaction?
+    id.map_or_else(
+        || {
+            Ok(query!(
+                "INSERT INTO crates (name) VALUES ($1) RETURNING id",
+                pkg.name,
+            )
+            .fetch_one(conn)
+            .block()?
+            .id)
+        },
+        Ok,
+    )
 }
 
 /// Convert dependencies into Vec<(String, String, String)>
@@ -280,23 +294,31 @@ fn add_keywords_into_database(
     for keyword in &pkg.keywords {
         let slug = slugify(&keyword);
         let keyword_id: i32 = {
-            let rows = conn.query("SELECT id FROM keywords WHERE slug = $1", &[&slug])?;
-            if !rows.is_empty() {
-                rows[0].get(0)
+            if let Some(record) = query!("SELECT id FROM keywords WHERE slug = $1", slug)
+                .fetch_optional(&mut *conn)
+                .block()?
+            {
+                record.id
             } else {
-                conn.query(
+                query!(
                     "INSERT INTO keywords (name, slug) VALUES ($1, $2) RETURNING id",
-                    &[&keyword, &slug],
-                )?[0]
-                    .get(0)
+                    keyword,
+                    slug,
+                )
+                .fetch_one(&mut *conn)
+                .block()?
+                .id
             }
         };
 
         // add releationship
-        let _ = conn.query(
+        let _ = query!(
             "INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
-            &[&release_id, &keyword_id],
-        );
+            release_id,
+            keyword_id,
+        )
+        .execute(&mut *conn)
+        .block();
     }
 
     Ok(())
@@ -324,24 +346,33 @@ fn add_authors_into_database(
             let slug = slugify(&author);
 
             let author_id: i32 = {
-                let rows = conn.query("SELECT id FROM authors WHERE slug = $1", &[&slug])?;
-                if !rows.is_empty() {
-                    rows[0].get(0)
+                if let Some(record) = query!("SELECT id FROM authors WHERE slug = $1", slug)
+                    .fetch_optional(&mut *conn)
+                    .block()?
+                {
+                    record.id
                 } else {
-                    conn.query(
+                    query!(
                         "INSERT INTO authors (name, email, slug) VALUES ($1, $2, $3)
-                                     RETURNING id",
-                        &[&author, &email, &slug],
-                    )?[0]
-                        .get(0)
+                            RETURNING id",
+                        author,
+                        email,
+                        slug,
+                    )
+                    .fetch_one(&mut *conn)
+                    .block()?
+                    .id
                 }
             };
 
             // add relationship
-            let _ = conn.query(
+            let _ = query!(
                 "INSERT INTO author_rels (rid, aid) VALUES ($1, $2)",
-                &[&release_id, &author_id],
-            );
+                release_id,
+                author_id,
+            )
+            .execute(&mut *conn)
+            .block();
         }
     }
 
@@ -354,7 +385,10 @@ pub fn update_crate_data_in_database(
     registry_data: &CrateData,
 ) -> Result<()> {
     info!("Updating crate data for {}", name);
-    let crate_id = conn.query("SELECT id FROM crates WHERE crates.name = $1", &[&name])?[0].get(0);
+    let crate_id = query!("SELECT id FROM crates WHERE crates.name = $1", name)
+        .fetch_one(&mut *conn)
+        .block()?
+        .id;
 
     update_owners_in_database(conn, &registry_data.owners, crate_id)?;
 
@@ -367,7 +401,7 @@ fn update_owners_in_database(
     owners: &[CrateOwner],
     crate_id: i32,
 ) -> Result<()> {
-    let rows = conn.query(
+    let existing_owners = query!(
         "
             SELECT login
             FROM owners
@@ -375,9 +409,12 @@ fn update_owners_in_database(
                 ON owner_rels.oid = owners.id
             WHERE owner_rels.cid = $1
         ",
-        &[&crate_id],
-    )?;
-    let existing_owners = rows.into_iter().map(|row| -> String { row.get(0) });
+        crate_id,
+    )
+    .fetch_all(&mut *conn)
+    .block()?
+    .into_iter()
+    .map(|record| record.login);
 
     for owner in owners {
         debug!("Updating owner data for {}: {:?}", owner.login, owner);
@@ -385,7 +422,7 @@ fn update_owners_in_database(
         // Update any existing owner data since it is mutable and could have changed since last
         // time we pulled it
         let owner_id: i32 = {
-            conn.query(
+            query!(
                 "
                     INSERT INTO owners (login, avatar, name, email)
                     VALUES ($1, $2, $3, $4)
@@ -396,25 +433,30 @@ fn update_owners_in_database(
                             email = $4
                     RETURNING id
                 ",
-                &[&owner.login, &owner.avatar, &owner.name, &owner.email],
-            )?[0]
-                .get(0)
+                owner.login,
+                owner.avatar,
+                owner.name,
+                owner.email,
+            )
+            .fetch_one(&mut *conn)
+            .block()?
+            .id
         };
 
         // add relationship
-        conn.query(
+        query!(
             "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-            &[&crate_id, &owner_id],
-        )?;
+            crate_id,
+            owner_id,
+        )
+        .execute(&mut *conn)
+        .block()?;
     }
 
-    let to_remove =
-        existing_owners.filter(|login| !owners.iter().any(|owner| &owner.login == login));
-
-    for login in to_remove {
+    for login in existing_owners {
         debug!("Removing owner relationship {}", login);
         // remove relationship
-        conn.query(
+        query!(
             "
                 DELETE FROM owner_rels
                 USING owners
@@ -422,8 +464,11 @@ fn update_owners_in_database(
                     AND owner_rels.oid = owners.id
                     AND owners.login = $2
             ",
-            &[&crate_id, &login],
-        )?;
+            crate_id,
+            login,
+        )
+        .execute(&mut *conn)
+        .block()?;
     }
 
     Ok(())
@@ -434,13 +479,17 @@ fn add_compression_into_database<I>(conn: &mut Client, algorithms: I, release_id
 where
     I: Iterator<Item = CompressionAlgorithm>,
 {
-    let sql = "
-    INSERT INTO compression_rels (release, algorithm)
-    VALUES ($1, $2)
-    ON CONFLICT DO NOTHING;";
-    let prepared = conn.prepare(sql)?;
     for alg in algorithms {
-        conn.query(&prepared, &[&release_id, &(alg as i32)])?;
+        query!(
+            "
+            INSERT INTO compression_rels (release, algorithm)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING;",
+            release_id,
+            alg as i32
+        )
+        .execute(&mut *conn)
+        .block()?;
     }
     Ok(())
 }

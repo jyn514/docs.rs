@@ -1,5 +1,5 @@
 use self::diff::{Diff, Diffable};
-use crate::Index;
+use crate::{db::Client, Index};
 use failure::ResultExt;
 
 mod data;
@@ -7,11 +7,7 @@ mod db;
 mod diff;
 mod index;
 
-pub fn run_check(
-    conn: &mut postgres::Client,
-    index: &Index,
-    dry_run: bool,
-) -> Result<(), failure::Error> {
+pub fn run_check(conn: &mut Client, index: &Index, dry_run: bool) -> Result<(), failure::Error> {
     if !dry_run {
         failure::bail!("TODO: only a --dry-run synchronization is supported currently");
     }

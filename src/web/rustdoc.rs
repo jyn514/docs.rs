@@ -7,7 +7,7 @@ use crate::{
         crate_details::CrateDetails, error::Nope, file::File, match_version,
         metrics::RenderingTimesRecorder, redirect_base, MatchSemver,
     },
-    Config, Metrics, Storage,
+    Blocking, Config, Metrics, Storage,
 };
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
@@ -17,6 +17,7 @@ use iron::{
 use lol_html::errors::RewritingError;
 use router::Router;
 use serde::Serialize;
+use sqlx::query;
 
 #[derive(Clone)]
 pub struct RustLangRedirector {
@@ -129,7 +130,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     let router = extension!(req, Router);
-    let mut conn = extension!(req, Pool).get()?;
+    let conn = &mut extension!(req, Pool).get()?;
 
     // this handler should never called without crate pattern
     let crate_name = cexpect!(req, router.find("crate"));
@@ -142,7 +143,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
-    let v = match_version(&mut conn, &crate_name, req_version)?;
+    let v = match_version(conn, &crate_name, req_version)?;
     if let Some(new_name) = v.corrected_name {
         // `match_version` checked against -/_ typos, so if we have a name here we should
         // use that instead
@@ -153,17 +154,19 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     let (target_name, has_docs): (String, bool) = {
-        let rows = ctry!(
+        let row = ctry!(
             req,
-            conn.query(
+            query!(
                 "SELECT target_name, rustdoc_status
                  FROM releases
                  WHERE releases.id = $1",
-                &[&id]
-            ),
+                id
+            )
+            .fetch_one(conn)
+            .block(),
         );
 
-        (rows[0].get(0), rows[0].get(1))
+        (row.target_name, row.rustdoc_status)
     };
 
     if target == Some("index.html") || target == Some(&target_name) {
@@ -534,57 +537,58 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let name = cexpect!(req, extension!(req, Router).find("crate"));
-    let mut conn = extension!(req, Pool).get()?;
+    let conn = &mut extension!(req, Pool).get()?;
 
-    let options =
-        match match_version(&mut conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
-            Ok(MatchSemver::Exact((version, id))) => {
-                let rows = ctry!(
-                    req,
-                    conn.query(
-                        "SELECT rustdoc_status
+    let options = match match_version(conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
+        Ok(MatchSemver::Exact((version, id))) => {
+            let row = ctry!(
+                req,
+                query!(
+                    "SELECT rustdoc_status
                      FROM releases
                      WHERE releases.id = $1",
-                        &[&id]
-                    ),
-                );
-                if !rows.is_empty() && rows[0].get(0) {
-                    BadgeOptions {
-                        subject: "docs".to_owned(),
-                        status: version,
-                        color: "#4d76ae".to_owned(),
-                    }
-                } else {
-                    BadgeOptions {
-                        subject: "docs".to_owned(),
-                        status: version,
-                        color: "#e05d44".to_owned(),
-                    }
+                    id
+                )
+                .fetch_one(conn)
+                .block()
+            );
+            if row.rustdoc_status {
+                BadgeOptions {
+                    subject: "docs".to_owned(),
+                    status: version,
+                    color: "#4d76ae".to_owned(),
+                }
+            } else {
+                BadgeOptions {
+                    subject: "docs".to_owned(),
+                    status: version,
+                    color: "#e05d44".to_owned(),
                 }
             }
+        }
 
-            Ok(MatchSemver::Semver((version, _))) => {
-                let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
-                let url = ctry!(
-                    req,
-                    iron::url::Url::parse_with_params(&base_url, &[("version", version)]),
-                );
-                let iron_url = ctry!(req, Url::from_generic_url(url));
-                return Ok(super::redirect(iron_url));
-            }
+        Ok(MatchSemver::Semver((version, _))) => {
+            let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
+            let url = ctry!(
+                req,
+                iron::url::Url::parse_with_params(&base_url, &[("version", version)]),
+            );
+            let iron_url = ctry!(req, Url::from_generic_url(url));
+            return Ok(super::redirect(iron_url));
+        }
 
-            Err(Nope::VersionNotFound) => BadgeOptions {
-                subject: "docs".to_owned(),
-                status: "version not found".to_owned(),
-                color: "#e05d44".to_owned(),
-            },
+        Err(Nope::VersionNotFound) => BadgeOptions {
+            subject: "docs".to_owned(),
+            status: "version not found".to_owned(),
+            color: "#e05d44".to_owned(),
+        },
 
-            Err(_) => BadgeOptions {
-                subject: "docs".to_owned(),
-                status: "no builds".to_owned(),
-                color: "#e05d44".to_owned(),
-            },
-        };
+        Err(_) => BadgeOptions {
+            subject: "docs".to_owned(),
+            status: "no builds".to_owned(),
+            color: "#e05d44".to_owned(),
+        },
+    };
 
     let mut resp = Response::with((status::Ok, ctry!(req, Badge::new(options)).to_svg()));
     resp.headers
@@ -627,8 +631,10 @@ impl Handler for SharedResourceHandler {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    use crate::Blocking;
     use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
+    use sqlx::{query, Executor};
     use std::{collections::BTreeMap, iter::FromIterator};
 
     fn try_latest_version_redirect(
@@ -1462,10 +1468,10 @@ mod test {
                 .version("0.13.0")
                 .create()?;
             // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
-            db.conn().query(
+            db.conn().execute(query!(
                 r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#,
-                &[&id],
-            )?;
+                id,
+            )).block()?;
             let web = env.frontend();
             assert_success("/strum/0.13.0/strum/", web)?;
             assert_success("/crate/strum/0.13.0/", web)?;

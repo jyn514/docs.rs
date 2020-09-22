@@ -1,9 +1,9 @@
 use super::{Blob, StorageTransaction};
 use crate::db::Pool;
-use crate::Metrics;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use crate::{Blocking, Metrics};
+use chrono::{DateTime, Utc};
 use failure::Error;
-use postgres::Transaction;
+use sqlx::{query, Connection, Transaction};
 use std::sync::Arc;
 
 pub(crate) struct DatabaseBackend {
@@ -17,13 +17,19 @@ impl DatabaseBackend {
     }
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
-        let query = "SELECT COUNT(*) > 0 FROM files WHERE path = $1";
-        let mut conn = self.pool.get()?;
-        Ok(conn.query(query, &[&path])?[0].get(0))
+        // as exists! is https://github.com/launchbadge/sqlx/issues/696
+        Ok(query!(
+            r#"SELECT COUNT(*) > 0 as "exists!" FROM files WHERE path = $1"#,
+            path
+        )
+        .fetch_one(&mut self.pool.get()?)
+        .block()?
+        .exists)
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         use std::convert::TryInto;
+        use std::io;
 
         // The maximum size for a BYTEA (the type used for `content`) is 1GB, so this cast is safe:
         // https://www.postgresql.org/message-id/162867790712200946i7ba8eb92v908ac595c0c35aee%40mail.gmail.com
@@ -31,41 +37,37 @@ impl DatabaseBackend {
 
         // The size limit is checked at the database level, to avoid receiving data altogether if
         // the limit is exceeded.
-        let rows = self.pool.get()?.query(
-            "SELECT
+        let record = query!(
+            r#"SELECT
                  path, mime, date_updated, compression,
                  (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,
-                 (LENGTH(content) > $2) AS is_too_big
+                 (LENGTH(content) > $2) AS "is_too_big!"
              FROM files
-             WHERE path = $1;",
-            &[&path, &(max_size)],
-        )?;
+             WHERE path = $1;"#,
+            path,
+            max_size,
+        )
+        .fetch_optional(&mut self.pool.get()?)
+        .block()?
+        .ok_or(super::PathNotFoundError)?;
 
-        if rows.is_empty() {
-            Err(super::PathNotFoundError.into())
-        } else {
-            let row = &rows[0];
-
-            if row.get("is_too_big") {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    crate::error::SizeLimitReached,
-                )
-                .into());
-            }
-
-            let compression = row.get::<_, Option<i32>>("compression").map(|i| {
-                i.try_into()
-                    .expect("invalid compression algorithm stored in database")
-            });
-            Ok(Blob {
-                path: row.get("path"),
-                mime: row.get("mime"),
-                date_updated: DateTime::from_utc(row.get::<_, NaiveDateTime>("date_updated"), Utc),
-                content: row.get("content"),
-                compression,
-            })
+        if record.is_too_big {
+            return Err(
+                io::Error::new(io::ErrorKind::Other, crate::error::SizeLimitReached).into(),
+            );
         }
+
+        let compression = record.compression.map(|i| {
+            i.try_into()
+                .expect("invalid compression algorithm stored in database")
+        });
+        Ok(Blob {
+            path: record.path,
+            mime: record.mime,
+            date_updated: DateTime::from_utc(record.date_updated, Utc),
+            content: record.content.expect("size errors were handled above"),
+            compression,
+        })
     }
 
     pub(super) fn start_connection(&self) -> Result<DatabaseClient, Error> {
@@ -77,7 +79,7 @@ impl DatabaseBackend {
 }
 
 pub(super) struct DatabaseClient {
-    conn: crate::db::PoolClient,
+    conn: crate::db::Client,
     metrics: Arc<Metrics>,
 }
 
@@ -86,14 +88,14 @@ impl DatabaseClient {
         &mut self,
     ) -> Result<DatabaseStorageTransaction<'_>, Error> {
         Ok(DatabaseStorageTransaction {
-            transaction: self.conn.transaction()?,
+            transaction: self.conn.begin().block()?,
             metrics: &self.metrics,
         })
     }
 }
 
 pub(super) struct DatabaseStorageTransaction<'a> {
-    transaction: Transaction<'a>,
+    transaction: Transaction<'a, sqlx::Postgres>,
     metrics: &'a Metrics,
 }
 
@@ -101,29 +103,30 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
     fn store_batch(&mut self, batch: Vec<Blob>) -> Result<(), Error> {
         for blob in batch {
             let compression = blob.compression.map(|alg| alg as i32);
-            self.transaction.query(
+            query!(
                 "INSERT INTO files (path, mime, content, compression)
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (path) DO UPDATE
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
-                &[&blob.path, &blob.mime, &blob.content, &compression],
-            )?;
+                blob.path, blob.mime, blob.content, compression,
+            ).execute(&mut self.transaction).block()?;
             self.metrics.uploaded_files_total.inc();
         }
         Ok(())
     }
 
     fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
-        self.transaction.execute(
+        query!(
             "DELETE FROM files WHERE path LIKE $1;",
-            &[&format!("{}%", prefix.replace('%', "\\%"))],
-        )?;
+            format!("{}%", prefix.replace('%', "\\%")),
+        )
+        .execute(&mut self.transaction)
+        .block()?;
         Ok(())
     }
 
     fn complete(self: Box<Self>) -> Result<(), Error> {
-        self.transaction.commit()?;
-        Ok(())
+        self.transaction.commit().block().map_err(Into::into)
     }
 }
 

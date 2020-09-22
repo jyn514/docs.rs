@@ -1,5 +1,5 @@
-use crate::{db::Pool, docbuilder::Limits, impl_webpage, web::page::WebPage};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use crate::{db::Pool, docbuilder::Limits, impl_webpage, web::page::WebPage, Blocking};
+use chrono::{DateTime, Utc};
 use iron::{
     headers::ContentType,
     mime::{Mime, SubLevel, TopLevel},
@@ -7,6 +7,7 @@ use iron::{
 };
 use serde::Serialize;
 use serde_json::Value;
+use sqlx::query;
 
 /// The sitemap
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -21,27 +22,27 @@ impl_webpage! {
 }
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
-    let mut conn = extension!(req, Pool).get()?;
-    let query = conn
-        .query(
-            "SELECT DISTINCT ON (crates.name)
-                    crates.name,
-                    releases.release_time
-             FROM crates
-             INNER JOIN releases ON releases.crate_id = crates.id
-             WHERE rustdoc_status = true",
-            &[],
-        )
-        .unwrap();
+    let conn = &mut extension!(req, Pool).get()?;
+    let query = query!(
+        "SELECT DISTINCT ON (crates.name)
+                crates.name,
+                releases.release_time
+            FROM crates
+            INNER JOIN releases ON releases.crate_id = crates.id
+            WHERE rustdoc_status = true",
+    )
+    .fetch_all(conn)
+    .block()
+    .unwrap();
 
     let releases = query
         .into_iter()
         .map(|row| {
-            let time = DateTime::<Utc>::from_utc(row.get::<_, NaiveDateTime>(1), Utc)
+            let time = DateTime::<Utc>::from_utc(row.release_time, Utc)
                 .format("%+")
                 .to_string();
 
-            (row.get(0), time)
+            (row.name, time)
         })
         .collect::<Vec<(String, String)>>();
 
@@ -68,14 +69,12 @@ struct AboutBuilds {
 impl_webpage!(AboutBuilds = "core/about/builds.html");
 
 pub fn about_builds_handler(req: &mut Request) -> IronResult<Response> {
-    let mut conn = extension!(req, Pool).get()?;
-    let res = ctry!(
-        req,
-        conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]),
-    );
+    let conn = &mut extension!(req, Pool).get()?;
+    let vers = query!("SELECT value FROM config WHERE name = 'rustc_version'").fetch_optional(conn);
+    let res = ctry!(req, vers.block());
 
-    let rustc_version = res.get(0).and_then(|row| {
-        if let Ok(Some(Value::String(version))) = row.try_get(0) {
+    let rustc_version = res.and_then(|row| {
+        if let Value::String(version) = row.value {
             Some(version)
         } else {
             None

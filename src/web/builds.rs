@@ -3,8 +3,9 @@ use crate::{
     docbuilder::Limits,
     impl_webpage,
     web::{page::WebPage, MetaData},
+    Blocking,
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use iron::{
     headers::{
         AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
@@ -13,6 +14,7 @@ use iron::{
 };
 use router::Router;
 use serde::Serialize;
+use sqlx::query;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Build {
@@ -45,17 +47,13 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
     let limits = ctry!(req, Limits::for_crate(&mut conn, name));
 
-    let query = ctry!(
+    let mut builds: Vec<_> = ctry!(
         req,
-        conn.query(
-            "SELECT crates.name,
-                releases.version,
-                releases.description,
-                releases.rustdoc_status,
-                releases.target_name,
+        query!(
+            "SELECT
                 builds.id,
                 builds.rustc_version,
-                builds.cratesfyi_version,
+                builds.cratesfyi_version as docsrs_version,
                 builds.build_status,
                 builds.build_time,
                 builds.output
@@ -64,12 +62,29 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
              INNER JOIN crates ON releases.crate_id = crates.id
              WHERE crates.name = $1 AND releases.version = $2
              ORDER BY id DESC",
-            &[&name, &version]
+            name,
+            version,
         )
-    );
+        .fetch_all(&mut conn)
+        .block()
+    )
+    .into_iter()
+    .map(|row| Build {
+        id: row.id,
+        rustc_version: row.rustc_version,
+        docsrs_version: row.docsrs_version,
+        build_status: row.build_status,
+        build_time: DateTime::from_utc(row.build_time, Utc),
+        output: row.output,
+    })
+    .collect();
 
-    let mut build_details = None;
+    let build_details = builds
+        .iter()
+        .find(|build| build.id == req_build_id)
+        .cloned();
     // FIXME: getting builds.output may cause performance issues when release have tons of builds
+    /*
     let mut builds = query
         .into_iter()
         .map(|row| {
@@ -91,6 +106,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             build
         })
         .collect::<Vec<Build>>();
+    */
 
     if req.url.path().join("/").ends_with(".json") {
         // Remove build output from build list for json output

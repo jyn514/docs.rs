@@ -1,23 +1,24 @@
 //! Releases web handlers
 
+use crate::db::Client;
 use crate::{
     build_queue::QueuedCrate,
     db::Pool,
     impl_webpage,
     web::{error::Nope, match_version, page::WebPage, redirect_base},
-    BuildQueue,
+    Blocking, BuildQueue,
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
     modifiers::Redirect,
     status, IronResult, Request, Response, Url,
 };
-use postgres::Client;
 use router::Router;
 use serde::Serialize;
 use serde_json::Value;
+use sqlx::{query, Executor, Row};
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -31,7 +32,7 @@ pub struct Release {
     pub(crate) name: String,
     pub(crate) version: String,
     description: Option<String>,
-    target_name: Option<String>,
+    target_name: String,
     rustdoc_status: bool,
     pub(crate) release_time: DateTime<Utc>,
     stars: i32,
@@ -43,7 +44,7 @@ impl Default for Release {
             name: String::new(),
             version: String::new(),
             description: None,
-            target_name: None,
+            target_name: String::new(),
             rustdoc_status: false,
             release_time: Utc::now(),
             stars: 0,
@@ -92,18 +93,23 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
         LIMIT $1 OFFSET $2",
         ordering,
     );
+    let query = sqlx::query(&query)
+        .bind(limit)
+        .bind(offset)
+        .bind(filter_failed);
 
-    conn.query(query.as_str(), &[&limit, &offset, &filter_failed])
+    conn.fetch_all(query)
+        .block()
         .unwrap()
         .into_iter()
         .map(|row| Release {
-            name: row.get(0),
-            version: row.get(1),
-            description: row.get(2),
-            target_name: row.get(3),
-            release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
-            rustdoc_status: row.get(5),
-            stars: row.get(6),
+            name: row.get("name"),
+            version: row.get("version"),
+            description: row.get("description"),
+            target_name: row.get("target_name"),
+            release_time: DateTime::from_utc(row.get("release_time"), Utc),
+            rustdoc_status: row.get("rustdoc_status"),
+            stars: row.get("github_stars"),
         })
         .collect()
 }
@@ -116,7 +122,8 @@ fn get_releases_by_author(
 ) -> (String, Vec<Release>) {
     let offset = (page - 1) * limit;
 
-    let query = "
+    let query = query!(
+        "
         SELECT crates.name,
                releases.version,
                releases.description,
@@ -124,32 +131,38 @@ fn get_releases_by_author(
                releases.release_time,
                releases.rustdoc_status,
                crates.github_stars,
-               authors.name
+               authors.name as author_name
         FROM crates
         INNER JOIN releases ON releases.id = crates.latest_version_id
         INNER JOIN author_rels ON releases.id = author_rels.rid
         INNER JOIN authors ON authors.id = author_rels.aid
         WHERE authors.slug = $1
         ORDER BY crates.github_stars DESC
-        LIMIT $2 OFFSET $3";
-    let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
+        LIMIT $2 OFFSET $3",
+        author,
+        limit,
+        offset
+    )
+    .fetch_all(conn)
+    .block()
+    .unwrap();
 
     let mut author_name = None;
     let packages = query
         .into_iter()
         .map(|row| {
             if author_name.is_none() {
-                author_name = Some(row.get(7));
+                author_name = Some(row.author_name);
             }
 
             Release {
-                name: row.get(0),
-                version: row.get(1),
-                description: row.get(2),
-                target_name: row.get(3),
-                release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
-                rustdoc_status: row.get(5),
-                stars: row.get(6),
+                name: row.name,
+                version: row.version,
+                description: row.description,
+                target_name: row.target_name,
+                release_time: DateTime::from_utc(row.release_time, Utc),
+                rustdoc_status: row.rustdoc_status,
+                stars: row.github_stars,
             }
         })
         .collect();
@@ -165,14 +178,15 @@ fn get_releases_by_owner(
 ) -> (String, Vec<Release>) {
     let offset = (page - 1) * limit;
 
-    let query = "SELECT crates.name,
+    let query = query!(
+        "SELECT crates.name,
                         releases.version,
                         releases.description,
                         releases.target_name,
                         releases.release_time,
                         releases.rustdoc_status,
                         crates.github_stars,
-                        owners.name,
+                        owners.name as owner_name,
                         owners.login
                  FROM crates
                  INNER JOIN releases ON releases.id = crates.latest_version_id
@@ -180,29 +194,35 @@ fn get_releases_by_owner(
                  INNER JOIN owners ON owners.id = owner_rels.oid
                  WHERE owners.login = $1
                  ORDER BY crates.github_stars DESC
-                 LIMIT $2 OFFSET $3";
-    let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
+                 LIMIT $2 OFFSET $3",
+        author,
+        limit,
+        offset
+    )
+    .fetch_all(conn)
+    .block()
+    .unwrap();
 
     let mut author_name = None;
     let packages = query
         .into_iter()
         .map(|row| {
             if author_name.is_none() {
-                author_name = Some(if !row.get::<usize, String>(7).is_empty() {
-                    row.get(7)
+                author_name = Some(if !row.owner_name.is_empty() {
+                    row.owner_name
                 } else {
-                    row.get(8)
+                    row.login
                 });
             }
 
             Release {
-                name: row.get(0),
-                version: row.get(1),
-                description: row.get(2),
-                target_name: row.get(3),
-                release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
-                rustdoc_status: row.get(5),
-                stars: row.get(6),
+                name: row.name,
+                version: row.version,
+                description: row.description,
+                target_name: row.target_name,
+                release_time: DateTime::from_utc(row.release_time, Utc),
+                rustdoc_status: row.rustdoc_status,
+                stars: row.github_stars,
             }
         })
         .collect();
@@ -231,7 +251,7 @@ fn get_search_results(
     query = query.trim();
     let offset = (page - 1) * limit;
 
-    let statement = "
+    let rows = query!(r#"
         SELECT
             crates.name AS name,
             releases.version AS version,
@@ -240,7 +260,7 @@ fn get_search_results(
             releases.release_time AS release_time,
             releases.rustdoc_status AS rustdoc_status,
             crates.github_stars AS github_stars,
-            COUNT(*) OVER() as total
+            COUNT(*) OVER() as "total!"
         FROM crates
         INNER JOIN (
             SELECT releases.id, releases.crate_id
@@ -263,29 +283,30 @@ fn get_search_results(
             levenshtein(crates.name, $1) ASC,
             crates.name ILIKE CONCAT('%', $1, '%'),
             releases.downloads DESC
-        LIMIT $2 OFFSET $3";
+        LIMIT $2 OFFSET $3"#,
+        query,
+        limit,
+        offset,
+    ).fetch_all(conn).block();
 
-    let rows = if let Ok(rows) = conn.query(statement, &[&query, &limit, &offset]) {
+    let rows = if let Ok(rows) = rows {
         rows
     } else {
         return (0, Vec::new());
     };
 
     // Each row contains the total number of possible/valid results, just get it once
-    let total_results = rows
-        .get(0)
-        .map(|row| row.get::<_, i64>("total"))
-        .unwrap_or_default();
+    let total_results = rows.get(0).map(|row| row.total).unwrap_or_default();
     let packages: Vec<Release> = rows
         .into_iter()
         .map(|row| Release {
-            name: row.get("name"),
-            version: row.get("version"),
-            description: row.get("description"),
-            target_name: row.get("target_name"),
-            release_time: DateTime::from_utc(row.get("release_time"), Utc),
-            rustdoc_status: row.get("rustdoc_status"),
-            stars: row.get::<_, i32>("github_stars"),
+            name: row.name,
+            version: row.version,
+            description: row.description,
+            target_name: row.target_name,
+            release_time: DateTime::from_utc(row.release_time, Utc),
+            rustdoc_status: row.rustdoc_status,
+            stars: row.github_stars,
         })
         .collect();
 
@@ -502,7 +523,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let url = req.url.as_ref();
     let mut params = url.query_pairs();
     let query = params.find(|(key, _)| key == "query");
-    let mut conn = extension!(req, Pool).get()?;
+    let conn = &mut extension!(req, Pool).get()?;
 
     if let Some((_, query)) = query {
         // check if I am feeling lucky button pressed and redirect user to crate page
@@ -517,10 +538,10 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             if query.is_empty() {
                 // FIXME: This is a fast query but using a constant
                 //        There are currently 280 crates with docs and 100+
-                //        starts. This should be fine for a while.
-                let rows = ctry!(
+                //        stars. This should be fine for a while.
+                let row = ctry!(
                     req,
-                    conn.query(
+                    query!(
                         "SELECT crates.name,
                             releases.version,
                             releases.target_name
@@ -529,22 +550,19 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                          ON crates.latest_version_id = releases.id
                      WHERE github_stars >= 100 AND rustdoc_status = true
                      OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
-                        &[]
-                    ),
+                    )
+                    .fetch_one(conn)
+                    .block(),
                 );
-                let row = rows.into_iter().next().unwrap();
 
-                let name: String = row.get("name");
-                let version: String = row.get("version");
-                let target_name: String = row.get("target_name");
                 let url = ctry!(
                     req,
                     Url::parse(&format!(
                         "{}/{}/{}/{}",
                         redirect_base(req),
-                        name,
-                        version,
-                        target_name
+                        row.name,
+                        row.version,
+                        row.target_name
                     )),
                 );
 
@@ -557,7 +575,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             // since we never pass a version into `match_version` here, we'll never get
             // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
             // matter
-            if let Ok(matchver) = match_version(&mut conn, &query, None) {
+            if let Ok(matchver) = match_version(conn, &query, None) {
                 let (version, id) = matchver.version.into_parts();
                 let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
 
@@ -565,20 +583,18 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 //        match_version should handle this instead of this code block.
                 //        This block is introduced to fix #163
                 let rustdoc_status = {
-                    let rows = ctry!(
+                    ctry!(
                         req,
-                        conn.query(
+                        query!(
                             "SELECT rustdoc_status
                          FROM releases
                          WHERE releases.id = $1",
-                            &[&id]
-                        ),
-                    );
-
-                    rows.into_iter()
-                        .next()
-                        .map(|r| r.get("rustdoc_status"))
-                        .unwrap_or_default()
+                            id,
+                        )
+                        .fetch_one(conn)
+                        .block(),
+                    )
+                    .rustdoc_status
                 };
 
                 let url = if rustdoc_status {
@@ -605,7 +621,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             }
         }
 
-        let (_, results) = get_search_results(&mut conn, &query, 1, RELEASES_IN_RELEASES);
+        let (_, results) = get_search_results(conn, &query, 1, RELEASES_IN_RELEASES);
         let title = if results.is_empty() {
             format!("No results found for '{}'", query)
         } else {
@@ -636,17 +652,14 @@ impl_webpage! {
 }
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
-    let mut conn = extension!(req, Pool).get()?;
+    let conn = &mut extension!(req, Pool).get()?;
     let activity_data: Value = ctry!(
         req,
-        conn.query(
-            "SELECT value FROM config WHERE name = 'release_activity'",
-            &[]
-        ),
+        query!("SELECT value FROM config WHERE name = 'release_activity'",)
+            .fetch_one(conn)
+            .block()
     )
-    .iter()
-    .next()
-    .map_or(Value::Null, |row| row.get("value"));
+    .value;
 
     ReleaseActivity {
         description: "Monthly release activity",

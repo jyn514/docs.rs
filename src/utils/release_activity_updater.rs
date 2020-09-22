@@ -1,47 +1,45 @@
+use crate::db::Client;
 use crate::error::Result;
+use crate::Blocking;
 use chrono::{Duration, Utc};
-use postgres::Client;
 use serde_json::{Map, Value};
+use sqlx::query;
 
 pub fn update_release_activity(conn: &mut Client) -> Result<()> {
     let mut dates = Vec::with_capacity(30);
     let mut crate_counts = Vec::with_capacity(30);
     let mut failure_counts = Vec::with_capacity(30);
 
+    // TODO: use async here instead of blocking on queries in a loop
     for day in 0..30 {
-        let rows = conn.query(
-            format!(
-                "SELECT COUNT(*)
-                 FROM releases
-                 WHERE release_time < NOW() - INTERVAL '{} day' AND
-                       release_time > NOW() - INTERVAL '{} day'",
-                day,
-                day + 1
-            )
-            .as_str(),
-            &[],
-        )?;
-        let failures_count_rows = conn.query(
-            format!(
-                "SELECT COUNT(*)
-                 FROM releases
-                 WHERE is_library = TRUE AND
-                       build_status = FALSE AND
-                       release_time < NOW() - INTERVAL '{} day' AND
-                       release_time > NOW() - INTERVAL '{} day'",
-                day,
-                day + 1
-            )
-            .as_str(),
-            &[],
-        )?;
+        let release_count = query!(
+            r#"SELECT COUNT(*) as "count!"
+                FROM releases
+                WHERE release_time < NOW() - CONCAT($1::text, ' day')::INTERVAL AND
+                      release_time > NOW() - CONCAT($2::text, ' day')::INTERVAL"#,
+            day.to_string(),
+            (day + 1).to_string(),
+        )
+        .fetch_one(&mut *conn)
+        .block()?
+        .count;
+        let failures_count_rows = query!(
+            r#"SELECT COUNT(*) as "count!"
+                FROM releases
+                WHERE is_library = TRUE AND
+                    build_status = FALSE AND
+                    release_time < NOW() - CONCAT($1::text, ' day')::INTERVAL AND
+                    release_time > NOW() - CONCAT($2::text, ' day')::INTERVAL"#,
+            day.to_string(),
+            (day + 1).to_string(),
+        )
+        .fetch_one(&mut *conn);
 
-        let release_count: i64 = rows[0].get(0);
-        let failure_count: i64 = failures_count_rows[0].get(0);
         let now = Utc::now().naive_utc();
         let date = now - Duration::days(day);
-
         dates.push(format!("{}", date.format("%d %b")));
+
+        let failure_count: i64 = failures_count_rows.block()?.count;
         crate_counts.push(release_count);
         failure_counts.push(failure_count);
     }
@@ -59,12 +57,14 @@ pub fn update_release_activity(conn: &mut Client) -> Result<()> {
         Value::Object(map)
     };
 
-    conn.query(
+    query!(
         "INSERT INTO config (name, value) VALUES ('release_activity', $1)
          ON CONFLICT (name) DO UPDATE
             SET value = $1 WHERE config.name = 'release_activity'",
-        &[&map],
-    )?;
+        map,
+    )
+    .execute(conn)
+    .block()?;
 
     Ok(())
 }

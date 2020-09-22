@@ -2,7 +2,10 @@
 
 pub(crate) mod page;
 
+use crate::Blocking;
+
 use log::{debug, info};
+use sqlx::{query, query_as};
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
@@ -89,6 +92,7 @@ mod sitemap;
 mod source;
 mod statics;
 
+use crate::db::Client;
 use crate::{impl_webpage, Context};
 use chrono::{DateTime, Utc};
 use error::Nope;
@@ -103,7 +107,6 @@ use iron::{
     Chain, Handler, Iron, IronError, IronResult, Listening, Request, Response, Url,
 };
 use page::TemplateData;
-use postgres::Client;
 use router::NoRoute;
 use semver::{Version, VersionReq};
 use serde::Serialize;
@@ -307,23 +310,25 @@ fn match_version(
 
     let mut corrected_name = None;
     let versions: Vec<(String, i32, bool)> = {
-        let query = "SELECT name, version, releases.id, releases.yanked
+        let rows = query!(
+            "SELECT name, version, releases.id, releases.yanked
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
-            WHERE normalize_crate_name(name) = normalize_crate_name($1)";
+            WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+            name,
+        )
+        .fetch_all(conn)
+        .block()
+        .map_err(|_| Nope::InternalServerError)?;
 
-        let rows = conn.query(query, &[&name]).unwrap();
-        let mut rows = rows.iter().peekable();
+        let mut rows = rows.into_iter().peekable();
 
         if let Some(row) = rows.peek() {
-            let db_name = row.get(0);
-
-            if db_name != name {
-                corrected_name = Some(db_name);
+            if row.name != name {
+                corrected_name = Some(row.name.clone());
             }
         };
 
-        rows.map(|row| (row.get(1), row.get(2), row.get(3)))
-            .collect()
+        rows.map(|row| (row.version, row.id, row.yanked)).collect()
     };
 
     if versions.is_empty() {
@@ -422,7 +427,7 @@ impl Server {
         context: &dyn Context,
     ) -> Result<Self, Error> {
         // Initialize templates
-        let template_data = Arc::new(TemplateData::new(&mut *context.pool()?.get()?)?);
+        let template_data = Arc::new(TemplateData::new(&mut context.pool()?.get()?)?);
         if reload_templates {
             TemplateData::start_template_reloading(template_data.clone(), context.pool()?);
         }
@@ -539,30 +544,32 @@ pub(crate) struct MetaData {
     pub(crate) name: String,
     pub(crate) version: String,
     pub(crate) description: Option<String>,
-    pub(crate) target_name: Option<String>,
+    pub(crate) target_name: String,
     pub(crate) rustdoc_status: bool,
     pub(crate) default_target: String,
 }
 
 impl MetaData {
     fn from_crate(conn: &mut Client, name: &str, version: &str) -> Option<MetaData> {
-        let rows = conn
-            .query(
-                "SELECT crates.name,
-                       releases.version,
-                       releases.description,
-                       releases.target_name,
-                       releases.rustdoc_status,
-                       releases.default_target
-                FROM releases
-                INNER JOIN crates ON crates.id = releases.crate_id
-                WHERE crates.name = $1 AND releases.version = $2",
-                &[&name, &version],
-            )
-            .unwrap();
+        query_as!(
+            MetaData,
+            "SELECT crates.name,
+                    releases.version,
+                    releases.description,
+                    releases.target_name,
+                    releases.rustdoc_status,
+                    releases.default_target
+            FROM releases
+            INNER JOIN crates ON crates.id = releases.crate_id
+            WHERE crates.name = $1 AND releases.version = $2",
+            name,
+            version,
+        )
+        .fetch_optional(conn)
+        .block()
+        .unwrap()
 
-        let row = rows.get(0)?;
-
+        /*
         Some(MetaData {
             name: row.get(0),
             version: row.get(1),
@@ -571,6 +578,7 @@ impl MetaData {
             rustdoc_status: row.get(4),
             default_target: row.get(5),
         })
+        */
     }
 }
 
@@ -595,6 +603,7 @@ mod test {
     use crate::{test::*, web::match_version};
     use kuchiki::traits::TendrilSink;
     use serde_json::json;
+    use sqlx::Executor;
 
     fn release(version: &str, env: &TestEnvironment) -> i32 {
         env.fake_release()
@@ -796,9 +805,12 @@ mod test {
             let db = env.db();
 
             let release_id = release("0.3.0", env);
-            let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
+            let query = query!(
+                "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
+                release_id
+            );
 
-            db.conn().query(query, &[&release_id]).unwrap();
+            db.conn().execute(query).block()?;
             assert_eq!(version(None, db), None);
             assert_eq!(version(Some("0.3"), db), None);
 
@@ -837,7 +849,7 @@ mod test {
             name: "serde".to_string(),
             version: "1.0.0".to_string(),
             description: Some("serde does stuff".to_string()),
-            target_name: None,
+            target_name: "".into(),
             rustdoc_status: true,
             default_target: "x86_64-unknown-linux-gnu".to_string(),
         };
@@ -853,7 +865,7 @@ mod test {
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
 
-        metadata.target_name = Some("x86_64-apple-darwin".to_string());
+        metadata.target_name = "x86_64-apple-darwin".to_string();
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",

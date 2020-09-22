@@ -1,5 +1,5 @@
 use super::{Blob, StorageTransaction};
-use crate::{Config, Metrics, RUNTIME};
+use crate::{Blocking, Config, Metrics};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
@@ -47,10 +47,12 @@ impl S3Backend {
                     panic!("safeguard to prevent creating temporary buckets outside of tests");
                 }
 
-                RUNTIME.block_on(client.create_bucket(rusoto_s3::CreateBucketRequest {
-                    bucket: config.s3_bucket.clone(),
-                    ..Default::default()
-                }))?;
+                client
+                    .create_bucket(rusoto_s3::CreateBucketRequest {
+                        bucket: config.s3_bucket.clone(),
+                        ..Default::default()
+                    })
+                    .block()?;
             }
         }
 
@@ -64,7 +66,7 @@ impl S3Backend {
     }
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
-        RUNTIME.block_on(async {
+        async {
             let req = HeadObjectRequest {
                 bucket: self.bucket.clone(),
                 key: path.into(),
@@ -77,11 +79,12 @@ impl S3Backend {
                 Err(RusotoError::Unknown(resp)) if resp.status == 404 => Ok(false),
                 Err(other) => Err(other.into()),
             }
-        })
+        }
+        .block()
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
-        RUNTIME.block_on(async {
+        async {
             let res = self
                 .client
                 .get_object(GetObjectRequest {
@@ -125,7 +128,8 @@ impl S3Backend {
                 content: content.into_inner(),
                 compression,
             })
-        })
+        }
+        .block()
     }
 
     pub(super) fn start_storage_transaction(&self) -> Result<S3StorageTransaction, Error> {
@@ -146,9 +150,11 @@ impl S3Backend {
         transaction.delete_prefix("")?;
         transaction.complete()?;
 
-        RUNTIME.block_on(self.client.delete_bucket(rusoto_s3::DeleteBucketRequest {
-            bucket: self.bucket.clone(),
-        }))?;
+        self.client
+            .delete_bucket(rusoto_s3::DeleteBucketRequest {
+                bucket: self.bucket.clone(),
+            })
+            .block()?;
 
         Ok(())
     }
@@ -160,7 +166,7 @@ pub(super) struct S3StorageTransaction<'a> {
 
 impl<'a> StorageTransaction for S3StorageTransaction<'a> {
     fn store_batch(&mut self, mut batch: Vec<Blob>) -> Result<(), Error> {
-        RUNTIME.block_on(async {
+        async {
             // Attempt to upload the batch 3 times
             for _ in 0..3 {
                 let mut futures = FuturesUnordered::new();
@@ -204,11 +210,12 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
             }
 
             panic!("failed to upload 3 times, exiting");
-        })
+        }
+        .block()
     }
 
     fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
-        RUNTIME.block_on(async {
+        async {
             let mut continuation_token = None;
             loop {
                 let list = self
@@ -259,7 +266,8 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                     return Ok(());
                 }
             }
-        })
+        }
+        .block()
     }
 
     fn complete(self: Box<Self>) -> Result<(), Error> {

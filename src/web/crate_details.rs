@@ -1,12 +1,14 @@
 use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
+use crate::db::Client;
+use crate::Blocking;
 use crate::{db::Pool, impl_webpage, web::page::WebPage};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use iron::prelude::*;
 use iron::Url;
-use postgres::Client;
 use router::Router;
 use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
+use sqlx::query;
 
 // TODO: Add target name and versions
 
@@ -34,7 +36,7 @@ pub struct CrateDetails {
     pub target_name: String,
     releases: Vec<Release>,
     github: bool, // is crate hosted in github
-    github_stars: Option<i32>,
+    github_stars: i32,
     github_forks: Option<i32>,
     github_issues: Option<i32>,
     pub(crate) metadata: MetaData,
@@ -70,7 +72,7 @@ pub struct Release {
 impl CrateDetails {
     pub fn new(conn: &mut Client, name: &str, version: &str) -> Option<CrateDetails> {
         // get all stuff, I love you rustfmt
-        let query = "
+        let krate = query!(r#"
             SELECT
                 crates.id AS crate_id,
                 releases.id AS release_id,
@@ -89,7 +91,7 @@ impl CrateDetails {
                 releases.keywords,
                 releases.have_examples,
                 releases.target_name,
-                ARRAY(SELECT releases.version FROM releases WHERE releases.crate_id = crates.id) AS versions,
+                ARRAY(SELECT releases.version FROM releases WHERE releases.crate_id = crates.id) AS "versions!",
                 crates.github_stars,
                 crates.github_forks,
                 crates.github_issues,
@@ -104,23 +106,14 @@ impl CrateDetails {
             FROM releases
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
-            WHERE crates.name = $1 AND releases.version = $2;";
-
-        let rows = conn.query(query, &[&name, &version]).unwrap();
-
-        let krate = if rows.is_empty() {
-            return None;
-        } else {
-            &rows[0]
-        };
-
-        let crate_id: i32 = krate.get("crate_id");
-        let release_id: i32 = krate.get("release_id");
+            WHERE crates.name = $1 AND releases.version = $2;"#,
+            name, version,
+        ).fetch_optional(&mut *conn).block().unwrap()?;
 
         // sort versions with semver
         let releases = {
-            let versions: Vec<String> = krate.get("versions");
-            let mut versions: Vec<semver::Version> = versions
+            let mut versions: Vec<semver::Version> = krate
+                .versions
                 .iter()
                 .filter_map(|version| semver::Version::parse(&version).ok())
                 .collect();
@@ -129,22 +122,23 @@ impl CrateDetails {
             versions.reverse();
             versions
                 .into_iter()
-                .map(|version| map_to_release(conn, crate_id, version))
+                .map(|version| map_to_release(conn, krate.crate_id, version))
                 .collect()
         };
 
         let metadata = MetaData {
-            name: krate.get("name"),
-            version: krate.get("version"),
-            description: krate.get("description"),
-            rustdoc_status: krate.get("rustdoc_status"),
-            target_name: krate.get("target_name"),
-            default_target: krate.get("default_target"),
+            name: krate.name.clone(),
+            version: krate.version.clone(),
+            description: krate.description.clone(),
+            rustdoc_status: krate.rustdoc_status,
+            target_name: krate.target_name.clone(),
+            default_target: krate.default_target,
         };
 
         let doc_targets = {
-            let data: Value = krate.get("doc_targets");
-            data.as_array()
+            krate
+                .doc_targets
+                .as_array()
                 .map(|array| {
                     array
                         .iter()
@@ -154,41 +148,38 @@ impl CrateDetails {
                 .unwrap_or_else(Vec::new)
         };
 
-        let documented_items: Option<i32> = krate.get("documented_items");
-        let total_items: Option<i32> = krate.get("total_items");
-
         let mut crate_details = CrateDetails {
-            name: krate.get("name"),
-            version: krate.get("version"),
-            description: krate.get("description"),
+            name: krate.name,
+            version: krate.version,
+            description: krate.description,
             authors: Vec::new(),
             owners: Vec::new(),
-            authors_json: krate.get("authors"),
-            dependencies: krate.get("dependencies"),
-            readme: krate.get("readme"),
-            rustdoc: krate.get("description_long"),
-            release_time: DateTime::from_utc(krate.get::<_, NaiveDateTime>("release_time"), Utc),
-            build_status: krate.get("build_status"),
+            authors_json: krate.authors,
+            dependencies: krate.dependencies,
+            readme: krate.readme,
+            rustdoc: krate.description_long,
+            release_time: DateTime::from_utc(krate.release_time, Utc),
+            build_status: krate.build_status,
             last_successful_build: None,
-            rustdoc_status: krate.get("rustdoc_status"),
-            repository_url: krate.get("repository_url"),
-            homepage_url: krate.get("homepage_url"),
-            keywords: krate.get("keywords"),
-            have_examples: krate.get("have_examples"),
-            target_name: krate.get("target_name"),
+            rustdoc_status: krate.rustdoc_status,
+            repository_url: krate.repository_url,
+            homepage_url: krate.homepage_url,
+            keywords: krate.keywords,
+            have_examples: krate.have_examples,
+            target_name: krate.target_name,
             releases,
             github: false,
-            github_stars: krate.get("github_stars"),
-            github_forks: krate.get("github_forks"),
-            github_issues: krate.get("github_issues"),
+            github_stars: krate.github_stars,
+            github_forks: krate.github_forks,
+            github_issues: krate.github_issues,
             metadata,
-            is_library: krate.get("is_library"),
-            yanked: krate.get("yanked"),
+            is_library: krate.is_library,
+            yanked: krate.yanked,
             doc_targets,
-            license: krate.get("license"),
-            documentation_url: krate.get("documentation_url"),
-            documented_items: documented_items.map(|v| v as f32),
-            total_items: total_items.map(|v| v as f32),
+            license: krate.license,
+            documentation_url: krate.documentation_url,
+            documented_items: krate.documented_items.map(|v| v as f32),
+            total_items: krate.total_items.map(|v| v as f32),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
@@ -197,35 +188,38 @@ impl CrateDetails {
         }
 
         // get authors
-        let authors = conn
-            .query(
-                "SELECT name, slug
-                 FROM authors
-                 INNER JOIN author_rels ON author_rels.aid = authors.id
-                 WHERE rid = $1",
-                &[&release_id],
-            )
-            .unwrap();
+        let authors = query!(
+            "SELECT name, slug
+                FROM authors
+                INNER JOIN author_rels ON author_rels.aid = authors.id
+                WHERE rid = $1",
+            krate.release_id,
+        )
+        .fetch_all(&mut *conn)
+        .block()
+        .unwrap();
 
+        // TODO: use fetch() instead of fetch_all for this
         crate_details.authors = authors
             .into_iter()
-            .map(|row| (row.get("name"), row.get("slug")))
+            .map(|row| (row.name, row.slug))
             .collect();
 
         // get owners
-        let owners = conn
-            .query(
-                "SELECT login, avatar
-                 FROM owners
-                 INNER JOIN owner_rels ON owner_rels.oid = owners.id
-                 WHERE cid = $1",
-                &[&crate_id],
-            )
-            .unwrap();
+        let owners = query!(
+            "SELECT login, avatar
+                FROM owners
+                INNER JOIN owner_rels ON owner_rels.oid = owners.id
+                WHERE cid = $1",
+            krate.crate_id,
+        )
+        .fetch_all(&mut *conn)
+        .block()
+        .unwrap();
 
         crate_details.owners = owners
             .into_iter()
-            .map(|row| (row.get("login"), row.get("avatar")))
+            .map(|row| (row.login, row.avatar))
             .collect();
 
         if !crate_details.build_status {
@@ -251,23 +245,21 @@ impl CrateDetails {
 }
 
 fn map_to_release(conn: &mut Client, crate_id: i32, version: semver::Version) -> Release {
-    let rows = conn
-        .query(
-            "SELECT build_status,
-                    yanked,
-                    is_library
-             FROM releases
-             WHERE releases.crate_id = $1 and releases.version = $2;",
-            &[&crate_id, &version.to_string()],
-        )
-        .unwrap();
+    let row = query!(
+        "SELECT build_status,
+                yanked,
+                is_library
+            FROM releases
+            WHERE releases.crate_id = $1 and releases.version = $2;",
+        crate_id,
+        version.to_string(),
+    )
+    .fetch_optional(conn)
+    .block()
+    .unwrap();
 
-    let (build_status, yanked, is_library) = rows.get(0).map_or_else(Default::default, |row| {
-        (
-            row.get("build_status"),
-            row.get("yanked"),
-            row.get("is_library"),
-        )
+    let (build_status, yanked, is_library) = row.map_or_else(Default::default, |row| {
+        (row.build_status, row.yanked, row.is_library)
     });
 
     Release {

@@ -1,10 +1,12 @@
 //! Database migrations
 
 use crate::error::Result as CratesfyiResult;
+use crate::Blocking;
 use log::info;
-use postgres::{Client, Error as PostgresError, Transaction};
+use postgres::{Error as PostgresError, Transaction};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
+use sqlx::{query, Executor};
 
 /// Creates a new PostgresMigration from upgrade and downgrade queries.
 /// Downgrade query should return database to previous state.
@@ -50,12 +52,17 @@ macro_rules! migration {
     }};
 }
 
-pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<()> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",
-        &[],
-    )?;
-    let mut adapter = PostgresAdapter::new(conn);
+pub fn migrate<'a>(
+    version: Option<Version>,
+    conn: impl Executor<'a, Database = sqlx::Postgres>,
+) -> CratesfyiResult<()> {
+    query!("CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",)
+        .execute(conn)
+        .block()?;
+    // TODO: this is awful
+    let config = crate::Config::from_env()?;
+    let mut conn = postgres::Client::connect(&config.database_url, postgres::NoTls)?;
+    let mut adapter = PostgresAdapter::new(&mut conn);
     adapter.set_metadata_table("database_versions");
 
     let mut migrator = Migrator::new(adapter);

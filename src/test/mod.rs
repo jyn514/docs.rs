@@ -3,15 +3,16 @@ mod fakes;
 use crate::db::{Pool, PoolClient};
 use crate::storage::{Storage, StorageKind};
 use crate::web::Server;
+use crate::Blocking;
 use crate::{BuildQueue, Config, Context, Index, Metrics};
-use failure::Error;
+use failure::{Error, ResultExt};
 use log::error;
 use once_cell::unsync::OnceCell;
-use postgres::Client as Connection;
 use reqwest::{
     blocking::{Client, RequestBuilder},
     Method,
 };
+use sqlx::{query, Executor};
 use std::{panic, sync::Arc};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
@@ -250,24 +251,32 @@ pub(crate) struct TestDatabase {
 
 impl TestDatabase {
     fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Self, Error> {
+        use sqlx::Connection;
+
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
-        conn.batch_execute(&format!(
-            "
+        let mut conn = sqlx::PgConnection::connect(&config.database_url)
+            .block()
+            .context("failed to connect")?;
+        conn.execute(
+            format!(
+                "
                 CREATE SCHEMA {0};
                 SET search_path TO {0}, public;
             ",
-            schema
-        ))?;
+                schema
+            )
+            .as_str(),
+        )
+        .block()
+        .context("failed to create schema")?;
         crate::db::migrate(None, &mut conn)?;
 
         // Move all sequence start positions 10000 apart to avoid overlapping primary keys
-        let query: String = conn
-            .query(
-                "
+        let query: String = query!(
+            "
                     SELECT relname
                     FROM pg_class
                     INNER JOIN pg_namespace
@@ -275,20 +284,26 @@ impl TestDatabase {
                     WHERE pg_class.relkind = 'S'
                         AND pg_namespace.nspname = $1
                 ",
-                &[&schema],
-            )?
-            .into_iter()
-            .map(|row| row.get(0))
-            .enumerate()
-            .map(|(i, sequence): (_, String)| {
-                let offset = (i + 1) * 10000;
-                format!(r#"ALTER SEQUENCE "{}" RESTART WITH {};"#, sequence, offset)
-            })
-            .collect();
-        conn.batch_execute(&query)?;
+            schema,
+        )
+        .fetch_all(&mut conn)
+        .block()
+        .context("failed to select metadata")?
+        .into_iter()
+        .map(|row| row.relname)
+        .enumerate()
+        .map(|(i, sequence): (_, String)| {
+            let offset = (i + 1) * 10000;
+            format!(r#"ALTER SEQUENCE "{}" RESTART WITH {};"#, sequence, offset)
+        })
+        .collect();
+        conn.execute(query.as_str())
+            .block()
+            .context("failed to alter sequence numbers")?;
 
         Ok(TestDatabase {
-            pool: Pool::new_with_schema(config, metrics, &schema)?,
+            pool: Pool::new_with_schema(config, metrics, &schema)
+                .context("failed to create pool")?,
             schema,
         })
     }
@@ -307,10 +322,11 @@ impl TestDatabase {
 impl Drop for TestDatabase {
     fn drop(&mut self) {
         crate::db::migrate(Some(0), &mut self.conn()).expect("downgrading database works");
-        if let Err(e) = self.conn().execute(
-            format!("DROP SCHEMA {} CASCADE;", self.schema).as_str(),
-            &[],
-        ) {
+        if let Err(e) = self
+            .conn()
+            .execute(format!("DROP SCHEMA {} CASCADE;", self.schema).as_str())
+            .block()
+        {
             error!("failed to drop test schema {}: {}", self.schema, e);
         }
     }

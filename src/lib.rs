@@ -13,7 +13,9 @@ pub use self::storage::Storage;
 pub use self::web::Server;
 
 use failure::Error;
-use once_cell::unsync::Lazy;
+use once_cell::sync::Lazy;
+use std::future::Future;
+//use sqlx::{Database, IntoArguments, FromRow, postgres::PgRow};
 use tokio::runtime::Runtime;
 
 mod build_queue;
@@ -32,8 +34,16 @@ mod web;
 
 use web::page::GlobalAlert;
 
-pub const RUNTIME: Lazy<Runtime> =
+pub static RUNTIME: Lazy<Runtime> =
     Lazy::new(|| Runtime::new().unwrap_or_else(|e| handle_error(e.into())));
+
+pub trait Blocking: Future + Sized {
+    fn block(self) -> Self::Output {
+        RUNTIME.handle().block_on(self)
+    }
+}
+
+impl<T: Future<Output = O>, O> Blocking for T {}
 
 pub fn handle_error(err: Error) -> ! {
     use std::fmt::Write;

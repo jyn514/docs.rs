@@ -1,11 +1,13 @@
+use crate::db::Client;
+use crate::Blocking;
 use crate::{db::Pool, error::Result};
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use failure::ResultExt;
 use notify::{watcher, RecursiveMode, Watcher};
 use path_slash::PathExt;
-use postgres::Client;
 use serde_json::Value;
+use sqlx::query;
 use std::{
     collections::HashMap,
     fmt,
@@ -75,22 +77,19 @@ impl TemplateData {
 }
 
 fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
-    let res = conn.query(
-        "SELECT value FROM config WHERE name = 'rustc_version';",
-        &[],
-    )?;
+    let res = query!("SELECT value FROM config WHERE name = 'rustc_version';",)
+        .fetch_optional(conn)
+        .block()?;
 
-    if res.is_empty() {
+    if let Some(vers) = res {
+        if let Some(vers_str) = vers.value.as_str() {
+            crate::utils::parse_rustc_version(vers_str)
+        } else {
+            failure::bail!("failed to parse the rustc version");
+        }
+    } else {
         failure::bail!("missing rustc version");
     }
-
-    if let Ok(vers) = res[0].try_get::<_, Value>("value") {
-        if let Some(vers_str) = vers.as_str() {
-            return Ok(crate::utils::parse_rustc_version(vers_str)?);
-        }
-    }
-
-    failure::bail!("failed to parse the rustc version");
 }
 
 pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {

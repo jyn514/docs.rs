@@ -1,7 +1,9 @@
 use crate::db::Pool;
 use crate::error::Result;
+use crate::Blocking;
 use crate::{Config, Metrics};
 use log::error;
+use sqlx::query;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
@@ -20,6 +22,16 @@ pub struct BuildQueue {
     max_attempts: i32,
 }
 
+macro_rules! query_attempts {
+    ($self: expr, $sql: literal $(,)?) => {
+        Ok(query!($sql, $self.max_attempts,)
+            .fetch_one(&mut $self.db.get()?)
+            .block()?
+            .count
+            .unwrap_or_default() as usize)
+    };
+}
+
 impl BuildQueue {
     pub fn new(db: Pool, metrics: Arc<Metrics>, config: &Config) -> Self {
         BuildQueue {
@@ -30,55 +42,43 @@ impl BuildQueue {
     }
 
     pub fn add_crate(&self, name: &str, version: &str, priority: i32) -> Result<()> {
-        self.db.get()?.execute(
+        query!(
             "INSERT INTO queue (name, version, priority) VALUES ($1, $2, $3);",
-            &[&name, &version, &priority],
-        )?;
+            name,
+            version,
+            priority,
+        )
+        .execute(&mut self.db.get()?)
+        .block()?;
         Ok(())
     }
 
     pub(crate) fn pending_count(&self) -> Result<usize> {
-        let res = self.db.get()?.query(
-            "SELECT COUNT(*) FROM queue WHERE attempt < $1;",
-            &[&self.max_attempts],
-        )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        query_attempts!(self, "SELECT COUNT(*) FROM queue WHERE attempt < $1;")
     }
 
     pub(crate) fn prioritized_count(&self) -> Result<usize> {
-        let res = self.db.get()?.query(
-            "SELECT COUNT(*) FROM queue WHERE attempt < $1 AND priority <= 0;",
-            &[&self.max_attempts],
-        )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        query_attempts!(
+            self,
+            "SELECT COUNT(*) FROM queue WHERE attempt < $1 AND priority <= 0;"
+        )
     }
 
     pub(crate) fn failed_count(&self) -> Result<usize> {
-        let res = self.db.get()?.query(
-            "SELECT COUNT(*) FROM queue WHERE attempt >= $1;",
-            &[&self.max_attempts],
-        )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        query_attempts!(self, "SELECT COUNT(*) FROM queue WHERE attempt >= $1;",)
     }
 
     pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
-        let query = self.db.get()?.query(
+        Ok(sqlx::query_as!(
+            QueuedCrate,
             "SELECT id, name, version, priority
              FROM queue
              WHERE attempt < $1
              ORDER BY priority ASC, attempt ASC, id ASC",
-            &[&self.max_attempts],
-        )?;
-
-        Ok(query
-            .into_iter()
-            .map(|row| QueuedCrate {
-                id: row.get("id"),
-                name: row.get("name"),
-                version: row.get("version"),
-                priority: row.get("priority"),
-            })
-            .collect())
+            self.max_attempts,
+        )
+        .fetch_all(&mut self.db.get()?)
+        .block()?)
     }
 
     pub(crate) fn process_next_crate(
@@ -97,15 +97,19 @@ impl BuildQueue {
         self.metrics.total_builds.inc();
         match res {
             Ok(()) => {
-                conn.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
+                query!("DELETE FROM queue WHERE id = $1;", to_process.id)
+                    .execute(&mut conn)
+                    .block()?;
             }
             Err(e) => {
                 // Increase attempt count
-                let rows = conn.query(
+                let attempt = query!(
                     "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
-                    &[&to_process.id],
-                )?;
-                let attempt: i32 = rows[0].get(0);
+                    to_process.id,
+                )
+                .fetch_one(&mut conn)
+                .block()?
+                .attempt;
 
                 if attempt >= self.max_attempts {
                     self.metrics.failed_builds.inc();

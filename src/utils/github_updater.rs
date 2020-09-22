@@ -1,15 +1,16 @@
+use crate::db::Client;
 use crate::error::Result;
-use crate::{db::Pool, Config};
+use crate::{db::Pool, Blocking, Config};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use log::{debug, warn};
-use postgres::Client;
 use regex::Regex;
 use reqwest::{
     blocking::Client as HttpClient,
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
 };
 use serde::Deserialize;
+use sqlx::query;
 
 const APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
@@ -67,32 +68,31 @@ impl GithubUpdater {
         let mut conn = self.pool.get()?;
         // TODO: This query assumes repository field in Cargo.toml is
         //       always the same across all versions of a crate
-        let rows = conn.query(
-            "SELECT DISTINCT ON (crates.name)
+        let rows = query!(
+            r#"SELECT DISTINCT ON (crates.name)
                     crates.name,
                     crates.id,
-                    releases.repository_url
+                    releases.repository_url as "repository_url!"
              FROM crates
              INNER JOIN releases ON releases.crate_id = crates.id
+                   -- NULL ~ x is always NULL, which coerces to false in a WHERE clause
+                   -- so we can be sure `repository_url` is non-null
              WHERE releases.repository_url ~ '^https?://github.com' AND
                    (crates.github_last_update < NOW() - INTERVAL '1 day' OR
                     crates.github_last_update IS NULL)
-             ORDER BY crates.name, releases.release_time DESC",
-            &[],
-        )?;
+             ORDER BY crates.name, releases.release_time DESC"#,
+        )
+        .fetch_all(&mut conn)
+        .block()?;
 
-        for row in &rows {
-            let crate_name: String = row.get(0);
-            let crate_id: i32 = row.get(1);
-            let repository_url: String = row.get(2);
-
-            debug!("Updating {}", crate_name);
-            if let Err(err) = self.update_crate(&mut conn, crate_id, &repository_url) {
+        for row in rows {
+            debug!("Updating {}", row.name);
+            if let Err(err) = self.update_crate(&mut conn, row.id, &row.repository_url) {
                 if self.is_rate_limited()? {
                     warn!("Skipping remaining updates because of rate limit");
                     return Ok(());
                 }
-                warn!("Failed to update {}: {}", crate_name, err);
+                warn!("Failed to update {}: {}", row.name, err);
             }
         }
 
@@ -127,22 +127,22 @@ impl GithubUpdater {
             get_github_path(repository_url).ok_or_else(|| err_msg("Failed to get github path"))?;
         let fields = self.get_github_fields(&path)?;
 
-        conn.execute(
+        query!(
             "UPDATE crates
              SET github_description = $1,
                  github_stars = $2, github_forks = $3,
                  github_issues = $4, github_last_commit = $5,
                  github_last_update = NOW()
              WHERE id = $6",
-            &[
-                &fields.description,
-                &(fields.stars as i32),
-                &(fields.forks as i32),
-                &(fields.issues as i32),
-                &fields.last_commit.naive_utc(),
-                &crate_id,
-            ],
-        )?;
+            fields.description,
+            fields.stars as i32,
+            fields.forks as i32,
+            fields.issues as i32,
+            fields.last_commit.naive_utc(),
+            crate_id,
+        )
+        .execute(conn)
+        .block()?;
 
         Ok(())
     }

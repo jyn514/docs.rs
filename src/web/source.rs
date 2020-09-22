@@ -1,16 +1,14 @@
 //! Source code browser
 
 use crate::{
-    db::Pool,
+    db::{Client, Pool},
     impl_webpage,
     web::{error::Nope, file::File as DbFile, page::WebPage, MetaData},
-    Config, Storage,
+    Blocking, Config, Storage,
 };
 use iron::{IronResult, Request, Response};
-use postgres::Client;
 use router::Router;
 use serde::Serialize;
-use serde_json::Value;
 use std::cmp::Ordering;
 
 /// A source file's name and mime type
@@ -48,30 +46,26 @@ impl FileList {
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
     fn from_path(conn: &mut Client, name: &str, version: &str, req_path: &str) -> Option<FileList> {
-        let rows = conn
-            .query(
-                "SELECT crates.name,
-                        releases.version,
-                        releases.description,
-                        releases.target_name,
-                        releases.rustdoc_status,
-                        releases.files,
-                        releases.default_target
-                FROM releases
-                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
-                WHERE crates.name = $1 AND releases.version = $2",
-                &[&name, &version],
-            )
-            .unwrap();
-
-        if rows.is_empty() {
-            return None;
-        }
-
-        let files: Value = rows[0].try_get(5).ok()?;
+        let row = sqlx::query!(
+            "SELECT crates.name,
+                    releases.version,
+                    releases.description,
+                    releases.target_name,
+                    releases.rustdoc_status,
+                    releases.files,
+                    releases.default_target
+            FROM releases
+            LEFT OUTER JOIN crates ON crates.id = releases.crate_id
+            WHERE crates.name = $1 AND releases.version = $2",
+            name,
+            version
+        )
+        .fetch_optional(conn)
+        .block()
+        .unwrap()?;
 
         let mut file_list = Vec::new();
-        if let Some(files) = files.as_array() {
+        if let Some(files) = row.files?.as_array() {
             file_list.reserve(files.len());
 
             for file in files {
@@ -127,12 +121,12 @@ impl FileList {
 
             Some(FileList {
                 metadata: MetaData {
-                    name: rows[0].get(0),
-                    version: rows[0].get(1),
-                    description: rows[0].get(2),
-                    target_name: rows[0].get(3),
-                    rustdoc_status: rows[0].get(4),
-                    default_target: rows[0].get(6),
+                    name: row.name,
+                    version: row.version,
+                    description: row.description,
+                    target_name: row.target_name,
+                    rustdoc_status: row.rustdoc_status,
+                    default_target: row.default_target,
                 },
                 files: file_list,
             })

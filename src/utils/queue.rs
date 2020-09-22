@@ -1,21 +1,25 @@
 //! Utilities for interacting with the build queue
 
+use crate::db::Client;
 use crate::error::Result;
-use postgres::Client;
+use crate::Blocking;
+use sqlx::query;
 
 const DEFAULT_PRIORITY: i32 = 0;
 
 /// Get the build queue priority for a crate
 pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
     // Search the `priority` table for a priority where the crate name matches the stored pattern
-    let query = conn.query(
+    let row = query!(
         "SELECT priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
-        &[&name],
-    )?;
+        name,
+    )
+    .fetch_optional(conn)
+    .block()?;
 
     // If no match is found, return the default priority
-    if let Some(row) = query.get(0) {
-        Ok(row.get(0))
+    if let Some(row) = row {
+        Ok(row.priority)
     } else {
         Ok(DEFAULT_PRIORITY)
     }
@@ -27,10 +31,13 @@ pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
 ///
 /// [`pattern`]: https://www.postgresql.org/docs/8.3/functions-matching.html
 pub fn set_crate_priority(conn: &mut Client, pattern: &str, priority: i32) -> Result<()> {
-    conn.query(
+    query!(
         "INSERT INTO crate_priorities (pattern, priority) VALUES ($1, $2)",
-        &[&pattern, &priority],
-    )?;
+        pattern,
+        priority,
+    )
+    .execute(conn)
+    .block()?;
 
     Ok(())
 }
@@ -38,12 +45,15 @@ pub fn set_crate_priority(conn: &mut Client, pattern: &str, priority: i32) -> Re
 /// Remove a pattern from the priority table, returning the priority that it was associated with or `None`
 /// if nothing was removed
 pub fn remove_crate_priority(conn: &mut Client, pattern: &str) -> Result<Option<i32>> {
-    let query = conn.query(
+    let priority = query!(
         "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
-        &[&pattern],
-    )?;
+        pattern,
+    )
+    .fetch_optional(conn)
+    .block()?
+    .map(|row| row.priority);
 
-    Ok(query.get(0).map(|row| row.get(0)))
+    Ok(priority)
 }
 
 #[cfg(test)]

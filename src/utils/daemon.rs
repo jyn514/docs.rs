@@ -81,7 +81,7 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
             let now = Utc::now();
             if now.hour() == 23 && now.minute() == 55 {
                 info!("Updating release activity");
-                update_release_activity(&mut *pool.get()?)?;
+                update_release_activity(&mut pool.get()?)?;
             }
             Ok(())
         },

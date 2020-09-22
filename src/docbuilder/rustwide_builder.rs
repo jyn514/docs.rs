@@ -1,5 +1,6 @@
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
+use crate::db::Client;
 use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
     update_crate_data_in_database, Pool,
@@ -9,16 +10,16 @@ use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use crate::{Config, Context, Index, Metrics, Storage};
+use crate::{Blocking, Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
-use postgres::Client;
 use rustwide::cmd::{Command, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use serde_json::Value;
+use sqlx::query;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -189,7 +190,7 @@ impl RustwideBuilder {
 
         info!("building a dummy crate to get essential files");
 
-        let mut conn = self.db.get()?;
+        let mut conn = &mut self.db.get()?;
         let limits = Limits::for_crate(&mut conn, DUMMY_CRATE_NAME)?;
 
         let mut build_dir = self
@@ -240,11 +241,13 @@ impl RustwideBuilder {
                 }
 
                 add_path_into_database(&self.storage, "", &dest)?;
-                conn.query(
+                query!(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
-                    &[&Value::String(self.rustc_version.clone())],
-                )?;
+                    Value::String(self.rustc_version.clone()),
+                )
+                .execute(conn)
+                .block()?;
 
                 Ok(())
             })?;
@@ -639,15 +642,18 @@ impl RustwideBuilder {
     fn should_build(&self, conn: &mut Client, name: &str, version: &str) -> Result<bool> {
         if self.skip_build_if_exists {
             // Check whether no successful builds are present in the database.
-            Ok(conn
-                .query(
-                    "SELECT 1 FROM crates, releases, builds
+            Ok(query!(
+                // needs `as x`, see https://github.com/launchbadge/sqlx/issues/702
+                "SELECT 1 as x FROM crates, releases, builds
                      WHERE crates.id = releases.crate_id AND releases.id = builds.rid
                        AND crates.name = $1 AND releases.version = $2
                        AND builds.build_status = TRUE;",
-                    &[&name, &version],
-                )?
-                .is_empty())
+                name,
+                version,
+            )
+            .fetch_optional(conn)
+            .block()?
+            .is_none())
         } else {
             Ok(true)
         }

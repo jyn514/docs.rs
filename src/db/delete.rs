@@ -1,6 +1,8 @@
-use crate::Storage;
+use crate::db::Client;
+use crate::{Blocking, Storage};
 use failure::{Error, Fail};
-use postgres::Client;
+use futures_util::TryFutureExt;
+use sqlx::{query, Connection, Executor};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -39,9 +41,11 @@ pub fn delete_version(
 }
 
 fn get_id(conn: &mut Client, name: &str) -> Result<i32, Error> {
-    let crate_id_res = conn.query("SELECT id FROM crates WHERE name = $1", &[&name])?;
-    if let Some(row) = crate_id_res.into_iter().next() {
-        Ok(row.get("id"))
+    let rec = query!("SELECT id FROM crates WHERE name = $1", name)
+        .fetch_optional(conn)
+        .block()?;
+    if let Some(rec) = rec {
+        Ok(rec.id)
     } else {
         Err(CrateDeletionError::MissingCrate(name.into()).into())
     }
@@ -59,80 +63,107 @@ const METADATA: &[(&str, &str)] = &[
 
 fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
-    let mut transaction = conn.transaction()?;
+    let mut transaction = conn.begin().block()?;
     for &(table, column) in METADATA {
+        // TODO: don't `block()` on individual statements, just the whole transaction
         transaction.execute(
-            format!("DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)", table, column).as_str(),
-            &[&crate_id, &version],
-        )?;
+            sqlx::query(
+                    format!("DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)", table, column).as_str(),
+                ).bind(crate_id).bind(version)
+        )
+        .block()?;
     }
-    transaction.execute(
+    query!(
         "DELETE FROM releases WHERE crate_id = $1 AND version = $2",
-        &[&crate_id, &version],
-    )?;
-    transaction.execute(
+        crate_id,
+        version,
+    )
+    .execute(&mut transaction)
+    .block()?;
+    query!(
         "UPDATE crates SET latest_version_id = (
             SELECT id FROM releases WHERE release_time = (
                 SELECT MAX(release_time) FROM releases WHERE crate_id = $1
             )
         ) WHERE id = $1",
-        &[&crate_id],
-    )?;
+        crate_id,
+    )
+    .execute(&mut transaction)
+    .block()?;
 
     for prefix in STORAGE_PATHS_TO_DELETE {
-        transaction.execute(
+        query!(
             "DELETE FROM files WHERE path LIKE $1;",
-            &[&format!("{}/{}/{}/%", prefix, name, version)],
-        )?;
+            format!("{}/{}/{}/%", prefix, name, version),
+        )
+        .execute(&mut transaction)
+        .block()?;
     }
 
-    transaction.commit().map_err(Into::into)
+    transaction.commit().map_err(Into::into).block()
 }
 
 fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> Result<(), Error> {
-    let mut transaction = conn.transaction()?;
+    let mut transaction = conn.begin().block()?;
 
-    transaction.execute(
-        "DELETE FROM sandbox_overrides WHERE crate_name = $1",
-        &[&name],
-    )?;
+    query!("DELETE FROM sandbox_overrides WHERE crate_name = $1", name,)
+        .execute(&mut transaction)
+        .block()?;
+
     for &(table, column) in METADATA {
-        transaction.execute(
-            format!(
-                "DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1)",
-                table, column
+        transaction
+            .execute(
+                sqlx::query(&format!(
+                    "DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1)",
+                    table, column
+                ))
+                .bind(crate_id),
             )
-            .as_str(),
-            &[&crate_id],
-        )?;
+            .block()?;
     }
-    transaction.execute("DELETE FROM owner_rels WHERE cid = $1;", &[&crate_id])?;
-    transaction.execute("DELETE FROM releases WHERE crate_id = $1;", &[&crate_id])?;
-    transaction.execute("DELETE FROM crates WHERE id = $1;", &[&crate_id])?;
+    query!("DELETE FROM owner_rels WHERE cid = $1;", crate_id)
+        .execute(&mut transaction)
+        .block()?;
+    query!("DELETE FROM releases WHERE crate_id = $1;", crate_id)
+        .execute(&mut transaction)
+        .block()?;
+    query!("DELETE FROM crates WHERE id = $1;", crate_id)
+        .execute(&mut transaction)
+        .block()?;
 
     // Transactions automatically rollback when not committing, so if any of the previous queries
     // fail the whole transaction will be aborted.
-    transaction.commit()?;
+    transaction.commit().block()?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::Client;
     use crate::test::{assert_success, wrapper};
     use failure::Error;
-    use postgres::Client;
 
     fn crate_exists(conn: &mut Client, name: &str) -> Result<bool, Error> {
-        Ok(!conn
-            .query("SELECT * FROM crates WHERE name = $1;", &[&name])?
-            .is_empty())
+        Ok(query!(
+            r#"SELECT COUNT(*) as "count!" FROM crates WHERE name = $1;"#,
+            name
+        )
+        .fetch_one(conn)
+        .block()?
+        .count
+            > 0)
     }
 
     fn release_exists(conn: &mut Client, id: i32) -> Result<bool, Error> {
-        Ok(!conn
-            .query("SELECT * FROM releases WHERE id = $1;", &[&id])?
-            .is_empty())
+        Ok(query!(
+            r#"SELECT COUNT(*) as "count!" FROM releases WHERE id = $1;"#,
+            id
+        )
+        .fetch_one(conn)
+        .block()?
+        .count
+            > 0)
     }
 
     #[test]
@@ -159,12 +190,12 @@ mod tests {
             assert!(release_exists(&mut db.conn(), pkg1_v2_id)?);
             assert!(release_exists(&mut db.conn(), pkg2_id)?);
 
-            let pkg1_id = &db
-                .conn()
-                .query("SELECT id FROM crates WHERE name = 'package-1';", &[])?[0]
-                .get("id");
+            let pkg1_id = query!("SELECT id FROM crates WHERE name = 'package-1';")
+                .fetch_one(&mut db.conn())
+                .block()?
+                .id;
 
-            delete_crate_from_database(&mut db.conn(), "package-1", *pkg1_id)?;
+            delete_crate_from_database(&mut db.conn(), "package-1", pkg1_id)?;
 
             assert!(!crate_exists(&mut db.conn(), "package-1")?);
             assert!(crate_exists(&mut db.conn(), "package-2")?);
@@ -180,17 +211,18 @@ mod tests {
     fn test_delete_version() {
         wrapper(|env| {
             fn authors(conn: &mut Client, crate_id: i32) -> Result<Vec<String>, Error> {
-                Ok(conn
-                    .query(
-                        "SELECT name FROM authors
+                Ok(query!(
+                    "SELECT name FROM authors
                         INNER JOIN author_rels ON authors.id = author_rels.aid
                         INNER JOIN releases ON author_rels.rid = releases.id
                     WHERE releases.crate_id = $1",
-                        &[&crate_id],
-                    )?
-                    .into_iter()
-                    .map(|row| row.get(0))
-                    .collect())
+                    crate_id,
+                )
+                .fetch_all(conn)
+                .block()?
+                .into_iter()
+                .map(|row| row.name)
+                .collect())
             }
 
             let db = env.db();
@@ -208,13 +240,10 @@ mod tests {
                 .create()?;
             assert!(release_exists(&mut db.conn(), v1)?);
             assert!(release_exists(&mut db.conn(), v2)?);
-            let crate_id = db
-                .conn()
-                .query("SELECT crate_id FROM releases WHERE id = $1", &[&v1])?
-                .into_iter()
-                .next()
-                .unwrap()
-                .get(0);
+            let crate_id = query!("SELECT crate_id FROM releases WHERE id = $1", v1)
+                .fetch_one(&mut db.conn())
+                .block()?
+                .crate_id;
             assert_eq!(
                 authors(&mut db.conn(), crate_id)?,
                 vec!["malicious actor".to_string(), "Peter Rabbit".to_string()]

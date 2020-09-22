@@ -3,9 +3,10 @@
 use super::{DocBuilder, RustwideBuilder};
 use crate::error::Result;
 use crate::utils::get_crate_priority;
-use crate::Index;
+use crate::{Blocking, Index};
 use crates_index_diff::ChangeKind;
 use log::{debug, error};
+use sqlx::query;
 
 impl DocBuilder {
     /// Updates registry index repository and adds new crates into build queue.
@@ -22,7 +23,7 @@ impl DocBuilder {
         for krate in &changes {
             match krate.kind {
                 ChangeKind::Yanked => {
-                    let res = conn.execute(
+                    let res = query!(
                         "
                         UPDATE releases
                             SET yanked = TRUE
@@ -31,8 +32,11 @@ impl DocBuilder {
                             AND name = $1
                             AND version = $2
                         ",
-                        &[&krate.name, &krate.version],
-                    );
+                        krate.name,
+                        krate.version,
+                    )
+                    .execute(&mut conn)
+                    .block();
                     match res {
                         Ok(_) => debug!("{}-{} yanked", krate.name, krate.version),
                         Err(err) => error!(
