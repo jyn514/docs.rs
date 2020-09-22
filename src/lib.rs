@@ -12,6 +12,10 @@ pub use self::metrics::Metrics;
 pub use self::storage::Storage;
 pub use self::web::Server;
 
+use failure::Error;
+use once_cell::unsync::Lazy;
+use tokio::runtime::Runtime;
+
 mod build_queue;
 mod config;
 mod context;
@@ -27,6 +31,23 @@ pub mod utils;
 mod web;
 
 use web::page::GlobalAlert;
+
+pub const RUNTIME: Lazy<Runtime> =
+    Lazy::new(|| Runtime::new().unwrap_or_else(|e| handle_error(e.into())));
+
+pub fn handle_error(err: Error) -> ! {
+    use std::fmt::Write;
+
+    let mut msg = format!("Error: {}", err);
+    for cause in err.iter_causes() {
+        write!(msg, "\n\nCaused by:\n    {}", cause).unwrap();
+    }
+    eprintln!("{}", msg);
+    if !err.backtrace().is_empty() {
+        eprintln!("\nStack backtrace:\n{}", err.backtrace());
+    }
+    std::process::exit(1);
+}
 
 // Warning message shown in the navigation bar of every page. Set to `None` to hide it.
 pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = None;

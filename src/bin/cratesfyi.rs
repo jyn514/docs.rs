@@ -1,5 +1,4 @@
 use std::env;
-use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -18,15 +17,7 @@ pub fn main() {
     logger_init();
 
     if let Err(err) = CommandLine::from_args().handle_args() {
-        let mut msg = format!("Error: {}", err);
-        for cause in err.iter_causes() {
-            write!(msg, "\n\nCaused by:\n    {}", cause).unwrap();
-        }
-        eprintln!("{}", msg);
-        if !err.backtrace().is_empty() {
-            eprintln!("\nStack backtrace:\n{}", err.backtrace());
-        }
-        std::process::exit(1);
+        docs_rs::handle_error(err);
     }
 }
 
