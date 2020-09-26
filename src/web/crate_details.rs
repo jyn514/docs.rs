@@ -101,8 +101,8 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target,
-                doc_coverage.total_items,
-                doc_coverage.documented_items
+                doc_coverage.total_items as "total_items?",
+                doc_coverage.documented_items as "documented_items?"
             FROM releases
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
