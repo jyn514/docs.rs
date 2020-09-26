@@ -1,0 +1,3894 @@
+{
+  "db": "PostgreSQL",
+  "0940e862217c0b341e9550955c8445c8ca9aacb97aa449556a2df8acda3c114c": {
+    "query": "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "attempt",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "129685f1de132105dede9e8a1e899e36aed17b224b027831028d8f1ae62d5689": {
+    "query": "SELECT COUNT(*) FROM queue WHERE attempt < $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "12c203c76454f3b597186769c28550affce7342fc6a79de7c3b3da048232e3ec": {
+    "query": "INSERT INTO crate_priorities (pattern, priority) VALUES ($1, $2)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "12cb8a4774a9e558b173fb56ef7c954c79fbd24c734f777caa12013f159da605": {
+    "query": "UPDATE crates\n             SET github_description = $1,\n                 github_stars = $2, github_forks = $3,\n                 github_issues = $4, github_last_commit = $5,\n                 github_last_update = NOW()\n             WHERE id = $6",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Int4",
+          "Int4",
+          "Int4",
+          "Timestamp",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "1b109b308517389024aa3fe682f3bd7175075c00a840315413ecb95ef694278c": {
+    "query": "SELECT COUNT(*) FROM queue WHERE attempt >= $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "1bc87a7948faeba25fd0a61f878d8e2a512d94fdd92db3cd3e640d127b5b3015": {
+    "query": "SELECT id FROM keywords WHERE slug = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "1dba7d98b9f95990afcc435f5d32be2f0922ef840dd9ea3b17db6f1d4b48160f": {
+    "query": "INSERT INTO authors (name, email, slug) VALUES ($1, $2, $3)\n                            RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "1e0b65bf95ed5e957bd6b884dbcbd4d4e4b60dcf4690d7d4f0d6959ae8d30be8": {
+    "query": "INSERT INTO doc_coverage (release_id, total_items, documented_items)\n            VALUES ($1, $2, $3)\n            ON CONFLICT (release_id) DO UPDATE\n                SET\n                    total_items = $2,\n                    documented_items = $3\n            RETURNING release_id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "release_id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "1e660947261dfa1a5d1745d1732df59e0cf67ef1906da818086d063e6a0e21c6": {
+    "query": "UPDATE crates\n         SET latest_version_id = $2\n         WHERE id = $1",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "2520b0bc7bba29a29f215bfe70e792af275f97a2cc51580418b9e4111b59821b": {
+    "query": "SELECT\n                builds.id,\n                builds.rustc_version,\n                builds.cratesfyi_version as docsrs_version,\n                builds.build_status,\n                builds.build_time,\n                builds.output\n             FROM builds\n             INNER JOIN releases ON releases.id = builds.rid\n             INNER JOIN crates ON releases.crate_id = crates.id\n             WHERE crates.name = $1 AND releases.version = $2\n             ORDER BY id DESC",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 1,
+          "name": "rustc_version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "docsrs_version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "build_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 4,
+          "name": "build_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "output",
+          "type_info": "Text"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ]
+    }
+  },
+  "255d59513b9d104ac04a4dc943b9b560fa2a8fdaeab3062e8ef791fffeaaed8f": {
+    "query": "SELECT name, version, releases.id, releases.yanked\n            FROM releases INNER JOIN crates ON releases.crate_id = crates.id\n            WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 3,
+          "name": "yanked",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "2931630412b7c00bafd92d5e794f9606e6c8cb9c3b96bf3f3fd67ae08156bb08": {
+    "query": "\n            SELECT login\n            FROM owners\n            INNER JOIN owner_rels\n                ON owner_rels.oid = owners.id\n            WHERE owner_rels.cid = $1\n        ",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "login",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "2b12f6560eb091b970ff6c32f8f3fc372a6a6176a22d3b37892d3be0d865707e": {
+    "query": "SELECT COUNT(*) as \"count!\" FROM crates WHERE name = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "2e2ecdf53fcd4b328e22164c73aa66fce426521d0f717e67d6cff03b5424ab3f": {
+    "query": "INSERT INTO files (path, mime, content, compression)\n                 VALUES ($1, $2, $3, $4)\n                 ON CONFLICT (path) DO UPDATE\n                    SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Bytea",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "33025546b47f0aaa03eaeb53b805838284891b2132b0e4c78c85710f6489f6b8": {
+    "query": "INSERT INTO config (name, value) VALUES ('rustc_version', $1) ON CONFLICT (name) DO UPDATE SET value = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Json"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "337665bde311c54fc9ab22d0926dc610770d650db67a78c9d93d6ea9dc83a68c": {
+    "query": "UPDATE crates SET latest_version_id = (\n            SELECT id FROM releases WHERE release_time = (\n                SELECT MAX(release_time) FROM releases WHERE crate_id = $1\n            )\n        ) WHERE id = $1",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "34707be53c9a12a3f3db8026f6e2bb89efc850f5a7ac64bc40758a8ff7809edb": {
+    "query": "SELECT crates.name,\n                    releases.version,\n                    releases.description,\n                    releases.target_name,\n                    releases.rustdoc_status,\n                    releases.files,\n                    releases.default_target\n            FROM releases\n            LEFT OUTER JOIN crates ON crates.id = releases.crate_id\n            WHERE crates.name = $1 AND releases.version = $2",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 5,
+          "name": "files",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 6,
+          "name": "default_target",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ]
+    }
+  },
+  "347ba337999beed22bc6ecb692dacbd2531d4fd8df592e747e5407a39c70efe4": {
+    "query": "\n        SELECT\n            crates.name,\n            releases.version\n        FROM crates\n        INNER JOIN releases ON releases.crate_id = crates.id\n        ORDER BY crates.id, releases.id\n    ",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "3a1b74ae66b1f93537b3d381d3b85023ab38994c2db52cff5e6656ebf500844e": {
+    "query": "SELECT COUNT(*) > 0 as \"exists!\" FROM files WHERE path = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "exists!",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "40913b77694c931d71eea577bbdd6d1ed091199214523cea60c25057a5993303": {
+    "query": "INSERT INTO releases (\n            crate_id, version, release_time,\n            dependencies, target_name, yanked, build_status,\n            rustdoc_status, test_status, license, repository_url,\n            homepage_url, description, description_long, readme,\n            authors, keywords, have_examples, downloads, files,\n            doc_targets, is_library, doc_rustc_version,\n            documentation_url, default_target\n         )\n         VALUES (\n            $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,\n            $10, $11, $12, $13, $14, $15, $16, $17, $18,\n            $19, $20, $21, $22, $23, $24, $25\n         )\n         ON CONFLICT (crate_id, version) DO UPDATE\n            SET release_time = $3,\n                dependencies = $4,\n                target_name = $5,\n                yanked = $6,\n                build_status = $7,\n                rustdoc_status = $8,\n                test_status = $9,\n                license = $10,\n                repository_url = $11,\n                homepage_url = $12,\n                description = $13,\n                description_long = $14,\n                readme = $15,\n                authors = $16,\n                keywords = $17,\n                have_examples = $18,\n                downloads = $19,\n                files = $20,\n                doc_targets = $21,\n                is_library = $22,\n                doc_rustc_version = $23,\n                documentation_url = $24,\n                default_target = $25\n         RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Varchar",
+          "Timestamp",
+          "Json",
+          "Varchar",
+          "Bool",
+          "Bool",
+          "Bool",
+          "Bool",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Json",
+          "Json",
+          "Bool",
+          "Int4",
+          "Json",
+          "Json",
+          "Bool",
+          "Varchar",
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "40a605f737ceeb5eea3aba0967234e0c512a8652a276ade082f74e0eda803279": {
+    "query": "SELECT COUNT(*) as \"count!\"\n                FROM releases\n                WHERE is_library = TRUE AND\n                    build_status = FALSE AND\n                    release_time < NOW() - CONCAT($1::text, ' day')::INTERVAL AND\n                    release_time > NOW() - CONCAT($2::text, ' day')::INTERVAL",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "41d6bfe5619e896b90317c402747e41b4a1120918b13d08f7b23bb00ff1b9277": {
+    "query": "INSERT INTO queue (name, version, priority) VALUES ($1, $2, $3);",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "44322d1d6fdd25c968150302e9604f12619f2b7a2ac1c0d0d31b5c50e35d03e3": {
+    "query": "SELECT COUNT(*) FROM queue WHERE attempt < $1 AND priority <= 0;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "4d964c8896a4e9f58aa1e99ab5e3fa084b468f72d4070de1c142e7e81f1f9be8": {
+    "query": "SELECT id FROM authors WHERE slug = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "4e5fc2484063ea008e7e4ee391a2f15aaddb0da2b0c2a78d83f75632cfb782b6": {
+    "query": "SELECT name, slug\n                FROM authors\n                INNER JOIN author_rels ON author_rels.aid = authors.id\n                WHERE rid = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "slug",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "4f81678f0d680c4be7215ef0667729e8518063e0ee4ecad5aa7e559e88b8e1cb": {
+    "query": "SELECT id FROM crates WHERE crates.name = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "5199664a9ad6401153931d05d04ec841420c99569765ace21e8003c6b7ae71e8": {
+    "query": "SELECT priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "priority",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "5611d366c2f80ca9c0d20864fbef1a918634af935d26428a1afa7f5eb92173a6": {
+    "query": "SELECT value FROM config WHERE name = 'rustc_version'",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "value",
+          "type_info": "Json"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "56575cd061c2a553153fc9b52a35119859719fa646c12d4d8b77f2518c8eee44": {
+    "query": "SELECT rustdoc_status\n                         FROM releases\n                         WHERE releases.id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "57b4d3f1a22ba3553911304d25b98b0b4ddf667404a8e44994cc04ecda808ccd": {
+    "query": "DELETE FROM releases WHERE crate_id = $1 AND version = $2",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "5999ff17eaffa304654fb25e0d6d530cfcb83011441716e7e44b7698b146c9c8": {
+    "query": "SELECT crate_id FROM releases WHERE id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "crate_id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "5bdff8f11f84ce6df73034aebdecebf2ba3690b01ef122d2ebf775193a3b199c": {
+    "query": "SELECT id, name, version, priority\n             FROM queue\n             WHERE attempt < $1\n             ORDER BY priority ASC, attempt ASC, id ASC",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 1,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "priority",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "5f31665c91028ac845408991812b704acf7b879860b7e5c55a1df04202e0ec65": {
+    "query": "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "668fbabb79ce261d7f6605d883e2b45cf4f7fc91d89586d0bc00daf450c33573": {
+    "query": "SELECT login, avatar\n                FROM owners\n                INNER JOIN owner_rels ON owner_rels.oid = owners.id\n                WHERE cid = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "login",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "avatar",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "682b7bee7f72ffa257a01a082994203d6308fb78da50ea28dceb6869a147852b": {
+    "query": "SELECT value FROM config WHERE name = 'rustc_version';",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "value",
+          "type_info": "Json"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "688c28ae99e5511238a6cbe1c53e3abc3924b4ecffc216e1556a53dda936ceae": {
+    "query": "INSERT INTO blacklisted_crates (crate_name) VALUES ($1);",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "6997e7d6b7b31dd369a0f86f8a96e384e33a340d06787dbc8ec4c8aaedb0e981": {
+    "query": "INSERT INTO author_rels (rid, aid) VALUES ($1, $2)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "6bdc31d51ab4b867dbfd41aa9e4f41d5fcfd16740f9cf8f4486d265eecea395f": {
+    "query": "SELECT rustdoc_status\n                     FROM releases\n                     WHERE releases.id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "6c533641849aa7e62104e24baafcf6bf07ee4e694f30da0f09d3ca65566a779b": {
+    "query": "SELECT id FROM crates WHERE name = 'package-1';",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "735acda27c734197a3e68d8bb7adcb7ea545673a9cd0cde77be894043ad4f6d9": {
+    "query": "DELETE FROM files WHERE path LIKE $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "7b8d70ca5121ed04906500135d8b9ef56a7bc6388460953d5611b37a3bc5c515": {
+    "query": "SELECT 1 as x FROM crates, releases, builds\n                     WHERE crates.id = releases.crate_id AND releases.id = builds.rid\n                       AND crates.name = $1 AND releases.version = $2\n                       AND builds.build_status = TRUE;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "x",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "7be4a44a1336e41023eca9b313d23adcafaeaeeb39322c565e59f3c4af79ca56": {
+    "query": "INSERT INTO crates (name) VALUES ($1) RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "7ee9287f3d316c6487aa805d7cecb966a1b466dec1bde49b7545b601f076d205": {
+    "query": "INSERT INTO keywords (name, slug) VALUES ($1, $2) RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "80df8947b7230ea7ab2bd08206c7ad00f4a16c3964bbd1e71ce646186be20c4e": {
+    "query": "DELETE FROM crates WHERE id = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "864a659b317f451949bf793899a7ea5b78ebf8a962fbb12b88eb8f1d807fbab6": {
+    "query": "DELETE FROM blacklisted_crates WHERE crate_name = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "8b6e194d7b8a5b9c8190ef4540e95fd58d8e91faab19511a7336038458b907ae": {
+    "query": "SELECT name FROM authors\n                        INNER JOIN author_rels ON authors.id = author_rels.aid\n                        INNER JOIN releases ON author_rels.rid = releases.id\n                    WHERE releases.crate_id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "8e1cad8c1dbf114360af345d46ee6fb59af6be21ae6cc910aca601d38ce7c968": {
+    "query": "\n        SELECT crates.name,\n               releases.version,\n               releases.description,\n               releases.target_name,\n               releases.release_time,\n               releases.rustdoc_status,\n               crates.github_stars,\n               authors.name as author_name\n        FROM crates\n        INNER JOIN releases ON releases.id = crates.latest_version_id\n        INNER JOIN author_rels ON releases.id = author_rels.rid\n        INNER JOIN authors ON authors.id = author_rels.aid\n        WHERE authors.slug = $1\n        ORDER BY crates.github_stars DESC\n        LIMIT $2 OFFSET $3",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 6,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 7,
+          "name": "author_name",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int8",
+          "Int8"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "90e4c41041ec93a3b3df5ec6b21f5bb6b72f3ac87325577354ec85c2259b46fb": {
+    "query": "\n                    SELECT relname\n                    FROM pg_class\n                    INNER JOIN pg_namespace\n                        ON pg_class.relnamespace = pg_namespace.oid\n                    WHERE pg_class.relkind = 'S'\n                        AND pg_namespace.nspname = $1\n                ",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "relname",
+          "type_info": "Name"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Name"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "91c2ed628244199f3768bd7bbf956472b1bca5d8922d07d0abe2c020d3eb3b4a": {
+    "query": "INSERT INTO sandbox_overrides (crate_name, timeout_seconds) VALUES ($1, 20*60);",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "91f1d7b2db2617ac1becfda87e31d6082569789cacf149bc4c287517d9543c03": {
+    "query": "\n            SELECT\n                crates.id AS crate_id,\n                releases.id AS release_id,\n                crates.name,\n                releases.version,\n                releases.description,\n                releases.authors,\n                releases.dependencies,\n                releases.readme,\n                releases.description_long,\n                releases.release_time,\n                releases.build_status,\n                releases.rustdoc_status,\n                releases.repository_url,\n                releases.homepage_url,\n                releases.keywords,\n                releases.have_examples,\n                releases.target_name,\n                ARRAY(SELECT releases.version FROM releases WHERE releases.crate_id = crates.id) AS \"versions!\",\n                crates.github_stars,\n                crates.github_forks,\n                crates.github_issues,\n                releases.is_library,\n                releases.yanked,\n                releases.doc_targets,\n                releases.license,\n                releases.documentation_url,\n                releases.default_target,\n                doc_coverage.total_items as \"total_items?\",\n                doc_coverage.documented_items as \"documented_items?\"\n            FROM releases\n            INNER JOIN crates ON releases.crate_id = crates.id\n            LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id\n            WHERE crates.name = $1 AND releases.version = $2;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "crate_id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 1,
+          "name": "release_id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 2,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 5,
+          "name": "authors",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 6,
+          "name": "dependencies",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 7,
+          "name": "readme",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 8,
+          "name": "description_long",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 9,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 10,
+          "name": "build_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 11,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 12,
+          "name": "repository_url",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 13,
+          "name": "homepage_url",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 14,
+          "name": "keywords",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 15,
+          "name": "have_examples",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 16,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 17,
+          "name": "versions!",
+          "type_info": "VarcharArray"
+        },
+        {
+          "ordinal": 18,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 19,
+          "name": "github_forks",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 20,
+          "name": "github_issues",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 21,
+          "name": "is_library",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 22,
+          "name": "yanked",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 23,
+          "name": "doc_targets",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 24,
+          "name": "license",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 25,
+          "name": "documentation_url",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 26,
+          "name": "default_target",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 27,
+          "name": "total_items?",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 28,
+          "name": "documented_items?",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "92ea6c595b720132a0c3da609414e499a13b3c2c74be2e530fb55bd27aa070e4": {
+    "query": "DELETE FROM owner_rels WHERE cid = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "95164942af2f397494f1ec7cc117020859c56c729cc969b1640fcc04c9f2ddfb": {
+    "query": "\n                DELETE FROM owner_rels\n                USING owners\n                WHERE owner_rels.cid = $1\n                    AND owner_rels.oid = owners.id\n                    AND owners.login = $2\n            ",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "96954280f19a0735b3cc3b567de2201bb4a5f789cb440163b02a4ec411010eef": {
+    "query": "SELECT COUNT(*) as \"count!\" FROM blacklisted_crates WHERE crate_name = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "9926ecafdc45014561a4948b88b426c6460562a57a86f873cba5e4bcf3fb0f9e": {
+    "query": "\n                    INSERT INTO owners (login, avatar, name, email)\n                    VALUES ($1, $2, $3, $4)\n                    ON CONFLICT (login) DO UPDATE\n                        SET\n                            avatar = $2,\n                            name = $3,\n                            email = $4\n                    RETURNING id\n                ",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "9b245b4e601c24ea09d9081f2b33d426be5b45d19082d51829270cc3f66550b4": {
+    "query": "INSERT INTO sandbox_overrides (crate_name, max_targets) VALUES ($1, 15)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "a77f0a8b4172772c31d6da183d30ee896096a551e24e5d2e47c7d8b843088e80": {
+    "query": "SELECT COUNT(*) as \"count!\" FROM releases WHERE id = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "a921202877adbc84f0f1103375ffcd128fec16481944585fe76b3d7c94195557": {
+    "query": "\n            INSERT INTO compression_rels (release, algorithm)\n            VALUES ($1, $2)\n            ON CONFLICT DO NOTHING;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "a932a7c27fe78b0b208e380a4589326ec1056b508d07387448bd64a66ac9aa73": {
+    "query": "SELECT target_name, rustdoc_status\n                 FROM releases\n                 WHERE releases.id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "aa4b7479b19098f24f2f5869779cdfdf7f4260f6148f9c9f9f8169b48fdf3496": {
+    "query": "SELECT COUNT(*) as \"count!\"\n                FROM releases\n                WHERE release_time < NOW() - CONCAT($1::text, ' day')::INTERVAL AND\n                      release_time > NOW() - CONCAT($2::text, ' day')::INTERVAL",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "aaa2cc1b0b88255cb0be16259e6b53571ead374e51fc62b9a646a77fc84b4d6d": {
+    "query": "DELETE FROM releases WHERE crate_id = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "af9e79bde5aefc6653257d46a04f29442314330fd6707886889dd109fd7540fe": {
+    "query": "SELECT id FROM crates WHERE name = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "b0d78459af19bd1e3d53bcd8c0aeeb766d16501c76003ebb8b2e5e16b171257b": {
+    "query": "INSERT INTO builds (rid, rustc_version,\n                                                    cratesfyi_version,\n                                                    build_status, output)\n                                VALUES ($1, $2, $3, $4, $5)\n                                RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Varchar",
+          "Varchar",
+          "Bool",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "b21882eaf83f3ef9b23c093552f6c52d13db946b842067b5d2430649bd7f68ef": {
+    "query": "SELECT DISTINCT ON (crates.name)\n                crates.name,\n                releases.release_time\n            FROM crates\n            INNER JOIN releases ON releases.crate_id = crates.id\n            WHERE rustdoc_status = true",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "b438a4273d94ebcacfa0f901208c6622489dcbe1def4b2fe88756f9a44d418e9": {
+    "query": "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "b817fb4ee043dc35edbe880a53aa572bfa2683d014a31df134a5a4467dd17c5b": {
+    "query": "SELECT crates.name,\n                        releases.version,\n                        releases.description,\n                        releases.target_name,\n                        releases.release_time,\n                        releases.rustdoc_status,\n                        crates.github_stars,\n                        owners.name as owner_name,\n                        owners.login\n                 FROM crates\n                 INNER JOIN releases ON releases.id = crates.latest_version_id\n                 INNER JOIN owner_rels ON owner_rels.cid = crates.id\n                 INNER JOIN owners ON owners.id = owner_rels.oid\n                 WHERE owners.login = $1\n                 ORDER BY crates.github_stars DESC\n                 LIMIT $2 OFFSET $3",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 6,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 7,
+          "name": "owner_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 8,
+          "name": "login",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int8",
+          "Int8"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "b919065b203987c6a4b832a4d4313c3775e8ef476542a6b77e7d545a390c7e78": {
+    "query": "SELECT build_status,\n                yanked,\n                is_library\n            FROM releases\n            WHERE releases.crate_id = $1 and releases.version = $2;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "build_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 1,
+          "name": "yanked",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 2,
+          "name": "is_library",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "be426c71f86f4b24947fc30add64c978a055371d35c46abef30023f43ec09f38": {
+    "query": "SELECT DISTINCT ON (crates.name)\n                    crates.name,\n                    crates.id,\n                    releases.repository_url as \"repository_url!\"\n             FROM crates\n             INNER JOIN releases ON releases.crate_id = crates.id\n                   -- NULL ~ x is always NULL, which coerces to false in a WHERE clause\n                   -- so we can be sure `repository_url` is non-null\n             WHERE releases.repository_url ~ '^https?://github.com' AND\n                   (crates.github_last_update < NOW() - INTERVAL '1 day' OR\n                    crates.github_last_update IS NULL)\n             ORDER BY crates.name, releases.release_time DESC",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 2,
+          "name": "repository_url!",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false,
+        true
+      ]
+    }
+  },
+  "c2022df73bc1301b06494b5e3acf9347e950674a520d7d15b5ca302fc509259a": {
+    "query": "SELECT * FROM sandbox_overrides WHERE crate_name = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "crate_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "max_memory_bytes",
+          "type_info": "Int8"
+        },
+        {
+          "ordinal": 2,
+          "name": "timeout_seconds",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 3,
+          "name": "max_targets",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        true,
+        true,
+        true
+      ]
+    }
+  },
+  "c76d6d6efda2ddf983e29518bbfabee2763a3ab01a35b076311f241b04155910": {
+    "query": "INSERT INTO config (name, value) VALUES ('release_activity', $1)\n         ON CONFLICT (name) DO UPDATE\n            SET value = $1 WHERE config.name = 'release_activity'",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Json"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "c8328ef704887faa486f9caebba0ba39a115b8e278ac4c6bb6b67f2dafefcfbb": {
+    "query": "DELETE FROM queue WHERE id = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "cbe92e61ca192b486da505ed5df3adf3cba1e48a5d35a1fda68e160b60b9e8e4": {
+    "query": "SELECT\n                 path, mime, date_updated, compression,\n                 (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,\n                 (LENGTH(content) > $2) AS \"is_too_big!\"\n             FROM files\n             WHERE path = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "path",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "mime",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "date_updated",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 3,
+          "name": "compression",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 4,
+          "name": "content",
+          "type_info": "Bytea"
+        },
+        {
+          "ordinal": 5,
+          "name": "is_too_big!",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        null,
+        null
+      ]
+    }
+  },
+  "cd568b56b5d3e43427218845ee19c4e9d598f61cf18eab47b36205b1aa1be301": {
+    "query": "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "priority",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "cdb3b07a4e1b1bd33e942dbd52f0c7ae6f9be2f70eb19f3da9f91e284bac29c6": {
+    "query": "\n        SELECT\n            crates.name AS name,\n            releases.version AS version,\n            releases.description AS description,\n            releases.target_name AS target_name,\n            releases.release_time AS release_time,\n            releases.rustdoc_status AS rustdoc_status,\n            crates.github_stars AS github_stars,\n            COUNT(*) OVER() as \"total!\"\n        FROM crates\n        INNER JOIN (\n            SELECT releases.id, releases.crate_id\n            FROM (\n                SELECT\n                    releases.id,\n                    releases.crate_id,\n                    RANK() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank\n                FROM releases\n                WHERE releases.rustdoc_status AND NOT releases.yanked\n            ) AS releases\n            WHERE releases.rank = 1\n        ) AS latest_release ON latest_release.crate_id = crates.id\n        INNER JOIN releases ON latest_release.id = releases.id\n        WHERE\n            ((char_length($1)::float - levenshtein(crates.name, $1)::float) / char_length($1)::float) >= 0.65\n            OR crates.name ILIKE CONCAT('%', $1, '%')\n        GROUP BY crates.id, releases.id\n        ORDER BY\n            levenshtein(crates.name, $1) ASC,\n            crates.name ILIKE CONCAT('%', $1, '%'),\n            releases.downloads DESC\n        LIMIT $2 OFFSET $3",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 6,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 7,
+          "name": "total!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int8",
+          "Int8"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        null
+      ]
+    }
+  },
+  "db11d62aa8b29820cfc9c72981930d47bd852c8d53fe3d8a2a67858619d575e4": {
+    "query": "INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "dcdc21d118c90554347339d6d64b5fbb7a3c5a00e9b9a030302931c207568749": {
+    "query": "SELECT crates.name,\n                    releases.version,\n                    releases.description,\n                    releases.target_name,\n                    releases.rustdoc_status,\n                    releases.default_target\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            WHERE crates.name = $1 AND releases.version = $2",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 5,
+          "name": "default_target",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "de4ba149a561c4bb467bcea081bdedff233398cddf4996734a64536b6a8c6579": {
+    "query": "DELETE FROM sandbox_overrides WHERE crate_name = $1",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "df0a9306663d822b22e7d080a16a70027130fff1b55e48789588721c704f54c4": {
+    "query": "SELECT value FROM config WHERE name = 'release_activity'",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "value",
+          "type_info": "Json"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "e21dad9003512317b3720e9e8a86d0acea5f686b556aa46f62fdf4790e0dac21": {
+    "query": "\n                        UPDATE releases\n                            SET yanked = TRUE\n                        FROM crates\n                        WHERE crates.id = releases.crate_id\n                            AND name = $1\n                            AND version = $2\n                        ",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "e8a2de26af336b302a2749c963ba604d773d8cda6f6734540f45f3cdad5537b0": {
+    "query": "INSERT INTO sandbox_overrides (crate_name, max_memory_bytes, timeout_seconds, max_targets)\n                 VALUES ($1, $2, $3, $4)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Int8",
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "ea4161a0299f3efa14d03d97eb95d2d0548e8760cd7f2606faa6d772931af7b3": {
+    "query": "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": []
+    }
+  },
+  "ec35a33dd4ea3758a2f82ac5a441e60ca47f46dde782fce4fdcb42789cf2fd16": {
+    "query": "UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "ee868cdf4b0f7d282956d8aef20e2f82806f32a0d4ffc11616c46da3b0900d68": {
+    "query": "SELECT crates.name,\n                            releases.version,\n                            releases.target_name\n                     FROM crates\n                     INNER JOIN releases\n                         ON crates.latest_version_id = releases.id\n                     WHERE github_stars >= 100 AND rustdoc_status = true\n                     OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "target_name",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "fb9dd5bf6d16a814c0ea07dd640a7dd6c020d7e01878567acdfa014f4f103b74": {
+    "query": "SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "crate_name",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "0940e862217c0b341e9550955c8445c8ca9aacb97aa449556a2df8acda3c114c": {
+    "query": "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "attempt",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "129685f1de132105dede9e8a1e899e36aed17b224b027831028d8f1ae62d5689": {
+    "query": "SELECT COUNT(*) FROM queue WHERE attempt < $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "12c203c76454f3b597186769c28550affce7342fc6a79de7c3b3da048232e3ec": {
+    "query": "INSERT INTO crate_priorities (pattern, priority) VALUES ($1, $2)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "12cb8a4774a9e558b173fb56ef7c954c79fbd24c734f777caa12013f159da605": {
+    "query": "UPDATE crates\n             SET github_description = $1,\n                 github_stars = $2, github_forks = $3,\n                 github_issues = $4, github_last_commit = $5,\n                 github_last_update = NOW()\n             WHERE id = $6",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Int4",
+          "Int4",
+          "Int4",
+          "Timestamp",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "1b109b308517389024aa3fe682f3bd7175075c00a840315413ecb95ef694278c": {
+    "query": "SELECT COUNT(*) FROM queue WHERE attempt >= $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "1bc87a7948faeba25fd0a61f878d8e2a512d94fdd92db3cd3e640d127b5b3015": {
+    "query": "SELECT id FROM keywords WHERE slug = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "1dba7d98b9f95990afcc435f5d32be2f0922ef840dd9ea3b17db6f1d4b48160f": {
+    "query": "INSERT INTO authors (name, email, slug) VALUES ($1, $2, $3)\n                            RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "1e0b65bf95ed5e957bd6b884dbcbd4d4e4b60dcf4690d7d4f0d6959ae8d30be8": {
+    "query": "INSERT INTO doc_coverage (release_id, total_items, documented_items)\n            VALUES ($1, $2, $3)\n            ON CONFLICT (release_id) DO UPDATE\n                SET\n                    total_items = $2,\n                    documented_items = $3\n            RETURNING release_id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "release_id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "1e660947261dfa1a5d1745d1732df59e0cf67ef1906da818086d063e6a0e21c6": {
+    "query": "UPDATE crates\n         SET latest_version_id = $2\n         WHERE id = $1",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "2520b0bc7bba29a29f215bfe70e792af275f97a2cc51580418b9e4111b59821b": {
+    "query": "SELECT\n                builds.id,\n                builds.rustc_version,\n                builds.cratesfyi_version as docsrs_version,\n                builds.build_status,\n                builds.build_time,\n                builds.output\n             FROM builds\n             INNER JOIN releases ON releases.id = builds.rid\n             INNER JOIN crates ON releases.crate_id = crates.id\n             WHERE crates.name = $1 AND releases.version = $2\n             ORDER BY id DESC",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 1,
+          "name": "rustc_version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "docsrs_version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "build_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 4,
+          "name": "build_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "output",
+          "type_info": "Text"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ]
+    }
+  },
+  "255d59513b9d104ac04a4dc943b9b560fa2a8fdaeab3062e8ef791fffeaaed8f": {
+    "query": "SELECT name, version, releases.id, releases.yanked\n            FROM releases INNER JOIN crates ON releases.crate_id = crates.id\n            WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 3,
+          "name": "yanked",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "2931630412b7c00bafd92d5e794f9606e6c8cb9c3b96bf3f3fd67ae08156bb08": {
+    "query": "\n            SELECT login\n            FROM owners\n            INNER JOIN owner_rels\n                ON owner_rels.oid = owners.id\n            WHERE owner_rels.cid = $1\n        ",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "login",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "2e2ecdf53fcd4b328e22164c73aa66fce426521d0f717e67d6cff03b5424ab3f": {
+    "query": "INSERT INTO files (path, mime, content, compression)\n                 VALUES ($1, $2, $3, $4)\n                 ON CONFLICT (path) DO UPDATE\n                    SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Bytea",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "33025546b47f0aaa03eaeb53b805838284891b2132b0e4c78c85710f6489f6b8": {
+    "query": "INSERT INTO config (name, value) VALUES ('rustc_version', $1) ON CONFLICT (name) DO UPDATE SET value = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Json"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "337665bde311c54fc9ab22d0926dc610770d650db67a78c9d93d6ea9dc83a68c": {
+    "query": "UPDATE crates SET latest_version_id = (\n            SELECT id FROM releases WHERE release_time = (\n                SELECT MAX(release_time) FROM releases WHERE crate_id = $1\n            )\n        ) WHERE id = $1",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "34707be53c9a12a3f3db8026f6e2bb89efc850f5a7ac64bc40758a8ff7809edb": {
+    "query": "SELECT crates.name,\n                    releases.version,\n                    releases.description,\n                    releases.target_name,\n                    releases.rustdoc_status,\n                    releases.files,\n                    releases.default_target\n            FROM releases\n            LEFT OUTER JOIN crates ON crates.id = releases.crate_id\n            WHERE crates.name = $1 AND releases.version = $2",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 5,
+          "name": "files",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 6,
+          "name": "default_target",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ]
+    }
+  },
+  "347ba337999beed22bc6ecb692dacbd2531d4fd8df592e747e5407a39c70efe4": {
+    "query": "\n        SELECT\n            crates.name,\n            releases.version\n        FROM crates\n        INNER JOIN releases ON releases.crate_id = crates.id\n        ORDER BY crates.id, releases.id\n    ",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "3a1b74ae66b1f93537b3d381d3b85023ab38994c2db52cff5e6656ebf500844e": {
+    "query": "SELECT COUNT(*) > 0 as \"exists!\" FROM files WHERE path = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "exists!",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "40913b77694c931d71eea577bbdd6d1ed091199214523cea60c25057a5993303": {
+    "query": "INSERT INTO releases (\n            crate_id, version, release_time,\n            dependencies, target_name, yanked, build_status,\n            rustdoc_status, test_status, license, repository_url,\n            homepage_url, description, description_long, readme,\n            authors, keywords, have_examples, downloads, files,\n            doc_targets, is_library, doc_rustc_version,\n            documentation_url, default_target\n         )\n         VALUES (\n            $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,\n            $10, $11, $12, $13, $14, $15, $16, $17, $18,\n            $19, $20, $21, $22, $23, $24, $25\n         )\n         ON CONFLICT (crate_id, version) DO UPDATE\n            SET release_time = $3,\n                dependencies = $4,\n                target_name = $5,\n                yanked = $6,\n                build_status = $7,\n                rustdoc_status = $8,\n                test_status = $9,\n                license = $10,\n                repository_url = $11,\n                homepage_url = $12,\n                description = $13,\n                description_long = $14,\n                readme = $15,\n                authors = $16,\n                keywords = $17,\n                have_examples = $18,\n                downloads = $19,\n                files = $20,\n                doc_targets = $21,\n                is_library = $22,\n                doc_rustc_version = $23,\n                documentation_url = $24,\n                default_target = $25\n         RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Varchar",
+          "Timestamp",
+          "Json",
+          "Varchar",
+          "Bool",
+          "Bool",
+          "Bool",
+          "Bool",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Json",
+          "Json",
+          "Bool",
+          "Int4",
+          "Json",
+          "Json",
+          "Bool",
+          "Varchar",
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "40a605f737ceeb5eea3aba0967234e0c512a8652a276ade082f74e0eda803279": {
+    "query": "SELECT COUNT(*) as \"count!\"\n                FROM releases\n                WHERE is_library = TRUE AND\n                    build_status = FALSE AND\n                    release_time < NOW() - CONCAT($1::text, ' day')::INTERVAL AND\n                    release_time > NOW() - CONCAT($2::text, ' day')::INTERVAL",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "41d6bfe5619e896b90317c402747e41b4a1120918b13d08f7b23bb00ff1b9277": {
+    "query": "INSERT INTO queue (name, version, priority) VALUES ($1, $2, $3);",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "44322d1d6fdd25c968150302e9604f12619f2b7a2ac1c0d0d31b5c50e35d03e3": {
+    "query": "SELECT COUNT(*) FROM queue WHERE attempt < $1 AND priority <= 0;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "4d964c8896a4e9f58aa1e99ab5e3fa084b468f72d4070de1c142e7e81f1f9be8": {
+    "query": "SELECT id FROM authors WHERE slug = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "4e5fc2484063ea008e7e4ee391a2f15aaddb0da2b0c2a78d83f75632cfb782b6": {
+    "query": "SELECT name, slug\n                FROM authors\n                INNER JOIN author_rels ON author_rels.aid = authors.id\n                WHERE rid = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "slug",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "4f81678f0d680c4be7215ef0667729e8518063e0ee4ecad5aa7e559e88b8e1cb": {
+    "query": "SELECT id FROM crates WHERE crates.name = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "5199664a9ad6401153931d05d04ec841420c99569765ace21e8003c6b7ae71e8": {
+    "query": "SELECT priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "priority",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "5611d366c2f80ca9c0d20864fbef1a918634af935d26428a1afa7f5eb92173a6": {
+    "query": "SELECT value FROM config WHERE name = 'rustc_version'",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "value",
+          "type_info": "Json"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "56575cd061c2a553153fc9b52a35119859719fa646c12d4d8b77f2518c8eee44": {
+    "query": "SELECT rustdoc_status\n                         FROM releases\n                         WHERE releases.id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "57b4d3f1a22ba3553911304d25b98b0b4ddf667404a8e44994cc04ecda808ccd": {
+    "query": "DELETE FROM releases WHERE crate_id = $1 AND version = $2",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "5bdff8f11f84ce6df73034aebdecebf2ba3690b01ef122d2ebf775193a3b199c": {
+    "query": "SELECT id, name, version, priority\n             FROM queue\n             WHERE attempt < $1\n             ORDER BY priority ASC, attempt ASC, id ASC",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 1,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "priority",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "668fbabb79ce261d7f6605d883e2b45cf4f7fc91d89586d0bc00daf450c33573": {
+    "query": "SELECT login, avatar\n                FROM owners\n                INNER JOIN owner_rels ON owner_rels.oid = owners.id\n                WHERE cid = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "login",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "avatar",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "682b7bee7f72ffa257a01a082994203d6308fb78da50ea28dceb6869a147852b": {
+    "query": "SELECT value FROM config WHERE name = 'rustc_version';",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "value",
+          "type_info": "Json"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "688c28ae99e5511238a6cbe1c53e3abc3924b4ecffc216e1556a53dda936ceae": {
+    "query": "INSERT INTO blacklisted_crates (crate_name) VALUES ($1);",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "6997e7d6b7b31dd369a0f86f8a96e384e33a340d06787dbc8ec4c8aaedb0e981": {
+    "query": "INSERT INTO author_rels (rid, aid) VALUES ($1, $2)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "6bdc31d51ab4b867dbfd41aa9e4f41d5fcfd16740f9cf8f4486d265eecea395f": {
+    "query": "SELECT rustdoc_status\n                     FROM releases\n                     WHERE releases.id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "735acda27c734197a3e68d8bb7adcb7ea545673a9cd0cde77be894043ad4f6d9": {
+    "query": "DELETE FROM files WHERE path LIKE $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "7b8d70ca5121ed04906500135d8b9ef56a7bc6388460953d5611b37a3bc5c515": {
+    "query": "SELECT 1 as x FROM crates, releases, builds\n                     WHERE crates.id = releases.crate_id AND releases.id = builds.rid\n                       AND crates.name = $1 AND releases.version = $2\n                       AND builds.build_status = TRUE;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "x",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "7be4a44a1336e41023eca9b313d23adcafaeaeeb39322c565e59f3c4af79ca56": {
+    "query": "INSERT INTO crates (name) VALUES ($1) RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "7ee9287f3d316c6487aa805d7cecb966a1b466dec1bde49b7545b601f076d205": {
+    "query": "INSERT INTO keywords (name, slug) VALUES ($1, $2) RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "80df8947b7230ea7ab2bd08206c7ad00f4a16c3964bbd1e71ce646186be20c4e": {
+    "query": "DELETE FROM crates WHERE id = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "864a659b317f451949bf793899a7ea5b78ebf8a962fbb12b88eb8f1d807fbab6": {
+    "query": "DELETE FROM blacklisted_crates WHERE crate_name = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "8e1cad8c1dbf114360af345d46ee6fb59af6be21ae6cc910aca601d38ce7c968": {
+    "query": "\n        SELECT crates.name,\n               releases.version,\n               releases.description,\n               releases.target_name,\n               releases.release_time,\n               releases.rustdoc_status,\n               crates.github_stars,\n               authors.name as author_name\n        FROM crates\n        INNER JOIN releases ON releases.id = crates.latest_version_id\n        INNER JOIN author_rels ON releases.id = author_rels.rid\n        INNER JOIN authors ON authors.id = author_rels.aid\n        WHERE authors.slug = $1\n        ORDER BY crates.github_stars DESC\n        LIMIT $2 OFFSET $3",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 6,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 7,
+          "name": "author_name",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int8",
+          "Int8"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "91f1d7b2db2617ac1becfda87e31d6082569789cacf149bc4c287517d9543c03": {
+    "query": "\n            SELECT\n                crates.id AS crate_id,\n                releases.id AS release_id,\n                crates.name,\n                releases.version,\n                releases.description,\n                releases.authors,\n                releases.dependencies,\n                releases.readme,\n                releases.description_long,\n                releases.release_time,\n                releases.build_status,\n                releases.rustdoc_status,\n                releases.repository_url,\n                releases.homepage_url,\n                releases.keywords,\n                releases.have_examples,\n                releases.target_name,\n                ARRAY(SELECT releases.version FROM releases WHERE releases.crate_id = crates.id) AS \"versions!\",\n                crates.github_stars,\n                crates.github_forks,\n                crates.github_issues,\n                releases.is_library,\n                releases.yanked,\n                releases.doc_targets,\n                releases.license,\n                releases.documentation_url,\n                releases.default_target,\n                doc_coverage.total_items as \"total_items?\",\n                doc_coverage.documented_items as \"documented_items?\"\n            FROM releases\n            INNER JOIN crates ON releases.crate_id = crates.id\n            LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id\n            WHERE crates.name = $1 AND releases.version = $2;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "crate_id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 1,
+          "name": "release_id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 2,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 5,
+          "name": "authors",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 6,
+          "name": "dependencies",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 7,
+          "name": "readme",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 8,
+          "name": "description_long",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 9,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 10,
+          "name": "build_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 11,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 12,
+          "name": "repository_url",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 13,
+          "name": "homepage_url",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 14,
+          "name": "keywords",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 15,
+          "name": "have_examples",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 16,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 17,
+          "name": "versions!",
+          "type_info": "VarcharArray"
+        },
+        {
+          "ordinal": 18,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 19,
+          "name": "github_forks",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 20,
+          "name": "github_issues",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 21,
+          "name": "is_library",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 22,
+          "name": "yanked",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 23,
+          "name": "doc_targets",
+          "type_info": "Json"
+        },
+        {
+          "ordinal": 24,
+          "name": "license",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 25,
+          "name": "documentation_url",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 26,
+          "name": "default_target",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 27,
+          "name": "total_items?",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 28,
+          "name": "documented_items?",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "92ea6c595b720132a0c3da609414e499a13b3c2c74be2e530fb55bd27aa070e4": {
+    "query": "DELETE FROM owner_rels WHERE cid = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "95164942af2f397494f1ec7cc117020859c56c729cc969b1640fcc04c9f2ddfb": {
+    "query": "\n                DELETE FROM owner_rels\n                USING owners\n                WHERE owner_rels.cid = $1\n                    AND owner_rels.oid = owners.id\n                    AND owners.login = $2\n            ",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "96954280f19a0735b3cc3b567de2201bb4a5f789cb440163b02a4ec411010eef": {
+    "query": "SELECT COUNT(*) as \"count!\" FROM blacklisted_crates WHERE crate_name = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "9926ecafdc45014561a4948b88b426c6460562a57a86f873cba5e4bcf3fb0f9e": {
+    "query": "\n                    INSERT INTO owners (login, avatar, name, email)\n                    VALUES ($1, $2, $3, $4)\n                    ON CONFLICT (login) DO UPDATE\n                        SET\n                            avatar = $2,\n                            name = $3,\n                            email = $4\n                    RETURNING id\n                ",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar",
+          "Varchar",
+          "Varchar"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "a921202877adbc84f0f1103375ffcd128fec16481944585fe76b3d7c94195557": {
+    "query": "\n            INSERT INTO compression_rels (release, algorithm)\n            VALUES ($1, $2)\n            ON CONFLICT DO NOTHING;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "a932a7c27fe78b0b208e380a4589326ec1056b508d07387448bd64a66ac9aa73": {
+    "query": "SELECT target_name, rustdoc_status\n                 FROM releases\n                 WHERE releases.id = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "aa4b7479b19098f24f2f5869779cdfdf7f4260f6148f9c9f9f8169b48fdf3496": {
+    "query": "SELECT COUNT(*) as \"count!\"\n                FROM releases\n                WHERE release_time < NOW() - CONCAT($1::text, ' day')::INTERVAL AND\n                      release_time > NOW() - CONCAT($2::text, ' day')::INTERVAL",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "aaa2cc1b0b88255cb0be16259e6b53571ead374e51fc62b9a646a77fc84b4d6d": {
+    "query": "DELETE FROM releases WHERE crate_id = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "af9e79bde5aefc6653257d46a04f29442314330fd6707886889dd109fd7540fe": {
+    "query": "SELECT id FROM crates WHERE name = $1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "b0d78459af19bd1e3d53bcd8c0aeeb766d16501c76003ebb8b2e5e16b171257b": {
+    "query": "INSERT INTO builds (rid, rustc_version,\n                                                    cratesfyi_version,\n                                                    build_status, output)\n                                VALUES ($1, $2, $3, $4, $5)\n                                RETURNING id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Varchar",
+          "Varchar",
+          "Bool",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "b21882eaf83f3ef9b23c093552f6c52d13db946b842067b5d2430649bd7f68ef": {
+    "query": "SELECT DISTINCT ON (crates.name)\n                crates.name,\n                releases.release_time\n            FROM crates\n            INNER JOIN releases ON releases.crate_id = crates.id\n            WHERE rustdoc_status = true",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
+  "b438a4273d94ebcacfa0f901208c6622489dcbe1def4b2fe88756f9a44d418e9": {
+    "query": "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "b817fb4ee043dc35edbe880a53aa572bfa2683d014a31df134a5a4467dd17c5b": {
+    "query": "SELECT crates.name,\n                        releases.version,\n                        releases.description,\n                        releases.target_name,\n                        releases.release_time,\n                        releases.rustdoc_status,\n                        crates.github_stars,\n                        owners.name as owner_name,\n                        owners.login\n                 FROM crates\n                 INNER JOIN releases ON releases.id = crates.latest_version_id\n                 INNER JOIN owner_rels ON owner_rels.cid = crates.id\n                 INNER JOIN owners ON owners.id = owner_rels.oid\n                 WHERE owners.login = $1\n                 ORDER BY crates.github_stars DESC\n                 LIMIT $2 OFFSET $3",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 6,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 7,
+          "name": "owner_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 8,
+          "name": "login",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int8",
+          "Int8"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "b919065b203987c6a4b832a4d4313c3775e8ef476542a6b77e7d545a390c7e78": {
+    "query": "SELECT build_status,\n                yanked,\n                is_library\n            FROM releases\n            WHERE releases.crate_id = $1 and releases.version = $2;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "build_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 1,
+          "name": "yanked",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 2,
+          "name": "is_library",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "be426c71f86f4b24947fc30add64c978a055371d35c46abef30023f43ec09f38": {
+    "query": "SELECT DISTINCT ON (crates.name)\n                    crates.name,\n                    crates.id,\n                    releases.repository_url as \"repository_url!\"\n             FROM crates\n             INNER JOIN releases ON releases.crate_id = crates.id\n                   -- NULL ~ x is always NULL, which coerces to false in a WHERE clause\n                   -- so we can be sure `repository_url` is non-null\n             WHERE releases.repository_url ~ '^https?://github.com' AND\n                   (crates.github_last_update < NOW() - INTERVAL '1 day' OR\n                    crates.github_last_update IS NULL)\n             ORDER BY crates.name, releases.release_time DESC",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "id",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 2,
+          "name": "repository_url!",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false,
+        true
+      ]
+    }
+  },
+  "c2022df73bc1301b06494b5e3acf9347e950674a520d7d15b5ca302fc509259a": {
+    "query": "SELECT * FROM sandbox_overrides WHERE crate_name = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "crate_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "max_memory_bytes",
+          "type_info": "Int8"
+        },
+        {
+          "ordinal": 2,
+          "name": "timeout_seconds",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 3,
+          "name": "max_targets",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        true,
+        true,
+        true
+      ]
+    }
+  },
+  "c76d6d6efda2ddf983e29518bbfabee2763a3ab01a35b076311f241b04155910": {
+    "query": "INSERT INTO config (name, value) VALUES ('release_activity', $1)\n         ON CONFLICT (name) DO UPDATE\n            SET value = $1 WHERE config.name = 'release_activity'",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Json"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "c8328ef704887faa486f9caebba0ba39a115b8e278ac4c6bb6b67f2dafefcfbb": {
+    "query": "DELETE FROM queue WHERE id = $1;",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "cbe92e61ca192b486da505ed5df3adf3cba1e48a5d35a1fda68e160b60b9e8e4": {
+    "query": "SELECT\n                 path, mime, date_updated, compression,\n                 (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,\n                 (LENGTH(content) > $2) AS \"is_too_big!\"\n             FROM files\n             WHERE path = $1;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "path",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "mime",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "date_updated",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 3,
+          "name": "compression",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 4,
+          "name": "content",
+          "type_info": "Bytea"
+        },
+        {
+          "ordinal": 5,
+          "name": "is_too_big!",
+          "type_info": "Bool"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int4"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        null,
+        null
+      ]
+    }
+  },
+  "cd568b56b5d3e43427218845ee19c4e9d598f61cf18eab47b36205b1aa1be301": {
+    "query": "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "priority",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "cdb3b07a4e1b1bd33e942dbd52f0c7ae6f9be2f70eb19f3da9f91e284bac29c6": {
+    "query": "\n        SELECT\n            crates.name AS name,\n            releases.version AS version,\n            releases.description AS description,\n            releases.target_name AS target_name,\n            releases.release_time AS release_time,\n            releases.rustdoc_status AS rustdoc_status,\n            crates.github_stars AS github_stars,\n            COUNT(*) OVER() as \"total!\"\n        FROM crates\n        INNER JOIN (\n            SELECT releases.id, releases.crate_id\n            FROM (\n                SELECT\n                    releases.id,\n                    releases.crate_id,\n                    RANK() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank\n                FROM releases\n                WHERE releases.rustdoc_status AND NOT releases.yanked\n            ) AS releases\n            WHERE releases.rank = 1\n        ) AS latest_release ON latest_release.crate_id = crates.id\n        INNER JOIN releases ON latest_release.id = releases.id\n        WHERE\n            ((char_length($1)::float - levenshtein(crates.name, $1)::float) / char_length($1)::float) >= 0.65\n            OR crates.name ILIKE CONCAT('%', $1, '%')\n        GROUP BY crates.id, releases.id\n        ORDER BY\n            levenshtein(crates.name, $1) ASC,\n            crates.name ILIKE CONCAT('%', $1, '%'),\n            releases.downloads DESC\n        LIMIT $2 OFFSET $3",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "release_time",
+          "type_info": "Timestamp"
+        },
+        {
+          "ordinal": 5,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 6,
+          "name": "github_stars",
+          "type_info": "Int4"
+        },
+        {
+          "ordinal": 7,
+          "name": "total!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Int8",
+          "Int8"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        null
+      ]
+    }
+  },
+  "db11d62aa8b29820cfc9c72981930d47bd852c8d53fe3d8a2a67858619d575e4": {
+    "query": "INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "dcdc21d118c90554347339d6d64b5fbb7a3c5a00e9b9a030302931c207568749": {
+    "query": "SELECT crates.name,\n                    releases.version,\n                    releases.description,\n                    releases.target_name,\n                    releases.rustdoc_status,\n                    releases.default_target\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            WHERE crates.name = $1 AND releases.version = $2",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "description",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 3,
+          "name": "target_name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 4,
+          "name": "rustdoc_status",
+          "type_info": "Bool"
+        },
+        {
+          "ordinal": 5,
+          "name": "default_target",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "de4ba149a561c4bb467bcea081bdedff233398cddf4996734a64536b6a8c6579": {
+    "query": "DELETE FROM sandbox_overrides WHERE crate_name = $1",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "df0a9306663d822b22e7d080a16a70027130fff1b55e48789588721c704f54c4": {
+    "query": "SELECT value FROM config WHERE name = 'release_activity'",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "value",
+          "type_info": "Json"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "e21dad9003512317b3720e9e8a86d0acea5f686b556aa46f62fdf4790e0dac21": {
+    "query": "\n                        UPDATE releases\n                            SET yanked = TRUE\n                        FROM crates\n                        WHERE crates.id = releases.crate_id\n                            AND name = $1\n                            AND version = $2\n                        ",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "ea4161a0299f3efa14d03d97eb95d2d0548e8760cd7f2606faa6d772931af7b3": {
+    "query": "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": []
+    }
+  },
+  "ec775714bd3ee952ba068f4e0fd94f8baa8761595c14debbdf818a057183a080": {
+    "query": "SELECT COUNT(*) as \"count!\" FROM config WHERE name = 'rustc_version';",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count!",
+          "type_info": "Int8"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        null
+      ]
+    }
+  },
+  "ee868cdf4b0f7d282956d8aef20e2f82806f32a0d4ffc11616c46da3b0900d68": {
+    "query": "SELECT crates.name,\n                            releases.version,\n                            releases.target_name\n                     FROM crates\n                     INNER JOIN releases\n                         ON crates.latest_version_id = releases.id\n                     WHERE github_stars >= 100 AND rustdoc_status = true\n                     OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "name",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 1,
+          "name": "version",
+          "type_info": "Varchar"
+        },
+        {
+          "ordinal": 2,
+          "name": "target_name",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "fb9dd5bf6d16a814c0ea07dd640a7dd6c020d7e01878567acdfa014f4f103b74": {
+    "query": "SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "crate_name",
+          "type_info": "Varchar"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [
+        false
+      ]
+    }
+  }
+}
