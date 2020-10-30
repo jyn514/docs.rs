@@ -1,11 +1,11 @@
 use crate::error::Result;
+use failure::ResultExt;
 use rustwide::{cmd::Command, Toolchain, Workspace};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 
 pub(crate) struct CargoMetadata {
-    root: Package,
+    root: ::cargo_metadata::Package,
 }
 
 impl CargoMetadata {
@@ -20,16 +20,13 @@ impl CargoMetadata {
             .log_output(false)
             .run_capture()?;
 
-        let mut iter = res.stdout_lines().iter();
-        let metadata = if let (Some(serialized), None) = (iter.next(), iter.next()) {
-            serde_json::from_str::<DeserializedMetadata>(serialized)?
-        } else {
-            return Err(::failure::err_msg(
-                "invalid output returned by `cargo metadata`",
-            ));
-        };
-
+        let metadata = cargo_metadata::MetadataCommand::parse(&res.stdout_lines().join("\n"))
+            .context("invalid output returned by `cargo metadata`")?;
+        let resolve = metadata
+            .resolve
+            .ok_or(failure::err_msg("expected resolve metadata"))?;
         let root = metadata.resolve.root;
+
         Ok(CargoMetadata {
             root: metadata
                 .packages
@@ -39,11 +36,12 @@ impl CargoMetadata {
         })
     }
 
-    pub(crate) fn root(&self) -> &Package {
+    pub(crate) fn root(&self) -> &::cargo_metadata::Package {
         &self.root
     }
 }
 
+/*
 #[derive(Deserialize, Serialize)]
 pub(crate) struct Package {
     pub(crate) id: String,
@@ -61,15 +59,26 @@ pub(crate) struct Package {
     pub(crate) authors: Vec<String>,
     pub(crate) features: HashMap<String, Vec<String>>,
 }
+*/
 
-impl Package {
+pub(crate) use cargo_metadata::Package;
+
+trait PackageExt {
+    fn library_target(&self) -> Option<&Target>;
+    fn is_library(&self) -> bool;
+    fn normalize_package_name(&self, name: &str) -> String;
+    fn package_name(&self) -> String;
+    fn library_name(&self) -> Option<String>;
+}
+
+impl PackageExt for Package {
     fn library_target(&self) -> Option<&Target> {
         self.targets
             .iter()
             .find(|target| target.crate_types.iter().any(|kind| kind != "bin"))
     }
 
-    pub(crate) fn is_library(&self) -> bool {
+    fn is_library(&self) -> bool {
         self.library_target().is_some()
     }
 
@@ -77,12 +86,12 @@ impl Package {
         name.replace('-', "_")
     }
 
-    pub(crate) fn package_name(&self) -> String {
+    fn package_name(&self) -> String {
         self.library_name()
             .unwrap_or_else(|| self.normalize_package_name(&self.targets[0].name))
     }
 
-    pub(crate) fn library_name(&self) -> Option<String> {
+    fn library_name(&self) -> Option<String> {
         self.library_target()
             .map(|target| self.normalize_package_name(&target.name))
     }
