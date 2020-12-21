@@ -10,7 +10,7 @@ use crate::{
     error::Result,
     index::api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
-    utils::MetadataPackage,
+    utils::{MetadataPackage, PackageExt},
 };
 use log::{debug, info};
 use postgres::Client;
@@ -206,11 +206,8 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
         .iter()
         .map(|dependency| {
             let name = dependency.name.clone();
-            let version = dependency.req.clone();
-            let kind = dependency
-                .kind
-                .clone()
-                .unwrap_or_else(|| "normal".to_string());
+            let version = dependency.req.to_string();
+            let kind = dependency.kind.clone();
 
             (name, version, kind)
         })
@@ -250,7 +247,7 @@ fn get_optional_dependencies(pkg: &MetadataPackage) -> Vec<Feature> {
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
 fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    let readme_path = source_dir.join(pkg.readme.as_deref().unwrap_or("README.md"));
+    let readme_path = source_dir.join(pkg.readme.as_deref().unwrap_or(Path::new("README.md")));
 
     if !readme_path.exists() {
         return Ok(None);
@@ -271,16 +268,11 @@ fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>
 }
 
 fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    if let Some(src_path) = &pkg.targets[0].src_path {
-        let src_path = Path::new(src_path);
-        if src_path.is_absolute() {
-            read_rust_doc(src_path)
-        } else {
-            read_rust_doc(&source_dir.join(src_path))
-        }
+    let src_path = &pkg.targets[0].src_path;
+    if src_path.is_absolute() {
+        read_rust_doc(src_path)
     } else {
-        // FIXME: should we care about metabuild targets?
-        Ok(None)
+        read_rust_doc(&source_dir.join(src_path))
     }
 }
 

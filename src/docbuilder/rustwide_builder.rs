@@ -8,7 +8,7 @@ use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
-use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
+use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata, PackageExt};
 use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
@@ -284,7 +284,11 @@ impl RustwideBuilder {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
         let package = metadata.root();
-        self.build_package(&package.name, &package.version, PackageKind::Local(path))
+        self.build_package(
+            &package.name,
+            &package.version.to_string(),
+            PackageKind::Local(path),
+        )
     }
 
     pub fn build_package(

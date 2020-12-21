@@ -61,9 +61,9 @@ pub(crate) struct Package {
 }
 */
 
-pub(crate) use cargo_metadata::Package;
+pub(crate) use cargo_metadata::{Metadata, Package};
 
-trait PackageExt {
+pub(crate) trait PackageExt {
     fn library_target(&self) -> Option<&Target>;
     fn is_library(&self) -> bool;
     fn normalize_package_name(&self, name: &str) -> String;
