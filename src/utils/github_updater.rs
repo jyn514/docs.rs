@@ -1,3 +1,4 @@
+use super::APP_USER_AGENT;
 use crate::error::Result;
 use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
@@ -12,12 +13,6 @@ use reqwest::{
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-
-const APP_USER_AGENT: &str = concat!(
-    env!("CARGO_PKG_NAME"),
-    " ",
-    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
-);
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
     nodes(ids: $ids) {
