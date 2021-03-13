@@ -211,7 +211,7 @@ impl RustwideBuilder {
                     .prefix("essential-files")
                     .tempdir()?;
 
-                let toolchain_version = self.toolchain.as_dist().unwrap().name();
+                let toolchain_version = self.toolchain.as_dist().expect("we only use the Toolchain::dist constructor").name();
                 let output = build.cmd(Rustdoc { toolchain_version })
                     .args(&["-Zunstable-options", "--print=unversioned-files"])
                     .run_capture()
